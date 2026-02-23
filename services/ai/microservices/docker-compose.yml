@@ -1,0 +1,190 @@
+version: '3.8'
+
+services:
+  # AI Recommendation Service
+  recommendations:
+    build:
+      context: ../..
+      dockerfile: services/ai/microservices/Dockerfile.ai
+    command: python recommendations_service.py
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - MODEL_PATH=/app/models/recommendations
+    volumes:
+      - ./models:/app/models
+      - ../../../data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Search Relevance Service
+  search-relevance:
+    build:
+      context: ../..
+      dockerfile: services/ai/microservices/Dockerfile.ai
+    command: python search_relevance_service.py
+    ports:
+      - "8002:8002"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - MODEL_PATH=/app/models/search
+    volumes:
+      - ./models:/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Price Optimization Service
+  pricing:
+    build:
+      context: ../..
+      dockerfile: services/ai/microservices/Dockerfile.ai
+    command: python pricing_service.py
+    ports:
+      - "8003:8003"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - MODEL_PATH=/app/models/pricing
+    volumes:
+      - ./models:/app/models
+      - ../../../data/market_prices:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Fraud Detection Service
+  fraud-detection:
+    build:
+      context: ../..
+      dockerfile: services/ai/microservices/Dockerfile.ai
+    command: python fraud_detection_service.py
+    ports:
+      - "8004:8004"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - MODEL_PATH=/app/models/fraud
+    volumes:
+      - ./models:/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Image Recognition Service
+  image-recognition:
+    build:
+      context: ../..
+      dockerfile: services/ai/microservices/Dockerfile.ai
+    command: python image_recognition_service.py
+    ports:
+      - "8005:8005"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - MODEL_PATH=/app/models/vision
+      - GPU_ENABLED=${GPU_ENABLED:-false}
+    volumes:
+      - ./models:/app/models
+      - ../../../public/images:/app/images
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT:-0}
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Elasticsearch for search relevance
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - recommendations
+      - search-relevance
+      - pricing
+      - fraud-detection
+      - image-recognition
+    restart: unless-stopped
+
+  # Model Training Scheduler
+  model-trainer:
+    build:
+      context: ../..
+      dockerfile: services/ai/microservices/Dockerfile.ai
+    command: python model_trainer.py
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    volumes:
+      - ./models:/app/models
+      - ../../../data:/app/data
+    restart: unless-stopped
+    depends_on:
+      - mlflow
+
+  # MLFlow for experiment tracking
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    restart: unless-stopped
+
+volumes:
+  elasticsearch-data:
+  redis-data:
+  mlflow-data:

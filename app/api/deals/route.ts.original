@@ -1,0 +1,118 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase/client';
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const category = searchParams.get('category');
+    const sortBy = searchParams.get('sort') || 'newest';
+    const minPrice = searchParams.get('minPrice');
+    const maxPrice = searchParams.get('maxPrice');
+
+    let query = supabase
+      .from('products')
+      .select(`
+        *,
+        brand:brands(*),
+        category:categories(*),
+        variants:product_variants(*)
+      `)
+      .eq('is_deal', true)
+      .gt('stock', 0);
+
+    // Apply category filter
+    if (category) {
+      const { data: categoryData } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('slug', category)
+        .single();
+
+      if (categoryData) {
+        query = query.eq('category_id', categoryData.id);
+      }
+    }
+
+    // Apply price filters
+    if (minPrice) {
+      query = query.gte('price', parseFloat(minPrice));
+    }
+    if (maxPrice) {
+      query = query.lte('price', parseFloat(maxPrice));
+    }
+
+    // Apply sorting
+    switch (sortBy) {
+      case 'price-low':
+        query = query.order('price', { ascending: true });
+        break;
+      case 'price-high':
+        query = query.order('price', { ascending: false });
+        break;
+      case 'rating':
+        query = query.order('rating', { ascending: false });
+        break;
+      case 'discount':
+        // Sort by discount percentage (requires original_price)
+        query = query.order('original_price', { ascending: false });
+        break;
+      default:
+        query = query.order('created_at', { ascending: false });
+    }
+
+    const { data, error } = await query.limit(limit);
+
+    if (error) throw error;
+
+    const products = data.map((item: any) => ({
+      id: item.id,
+      slug: item.slug,
+      name: item.name,
+      description: item.description,
+      price: parseFloat(item.price),
+      originalPrice: item.original_price ? parseFloat(item.original_price) : undefined,
+      sku: item.sku,
+      brand: {
+        id: item.brand.id,
+        slug: item.brand.slug,
+        name: item.brand.name,
+        logo: item.brand.logo,
+        productCount: item.brand.product_count,
+      },
+      category: {
+        id: item.category.id,
+        slug: item.category.slug,
+        name: item.category.name,
+        productCount: item.category.product_count,
+      },
+      images: item.images || [],
+      variants: item.variants?.map((v: any) => ({
+        id: v.id,
+        name: v.name,
+        price: parseFloat(v.price),
+        originalPrice: v.original_price ? parseFloat(v.original_price) : undefined,
+        sku: v.sku,
+        stock: v.stock,
+        attributes: v.attributes || {},
+      })) || [],
+      specifications: item.specifications || {},
+      rating: parseFloat(item.rating) || 0,
+      reviewCount: item.review_count || 0,
+      stock: item.stock,
+      isFeatured: item.is_featured,
+      isDeal: item.is_deal,
+      dealEndsAt: item.deal_ends_at,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+    }));
+
+    return NextResponse.json(products);
+  } catch (error: any) {
+    console.error('Error fetching deals:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch deals' },
+      { status: 500 }
+    );
+  }
+}

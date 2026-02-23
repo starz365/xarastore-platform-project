@@ -1,0 +1,241 @@
+import { analytics } from './tracker';
+
+export const AnalyticsEvents = {
+  // Page Views
+  PAGE_VIEW: 'page_view',
+  
+  // Product Events
+  PRODUCT_VIEW: 'view_item',
+  PRODUCT_CLICK: 'select_item',
+  ADD_TO_WISHLIST: 'add_to_wishlist',
+  REMOVE_FROM_WISHLIST: 'remove_from_wishlist',
+  
+  // Cart Events
+  ADD_TO_CART: 'add_to_cart',
+  REMOVE_FROM_CART: 'remove_from_cart',
+  VIEW_CART: 'view_cart',
+  UPDATE_CART_QUANTITY: 'update_cart_quantity',
+  
+  // Checkout Events
+  BEGIN_CHECKOUT: 'begin_checkout',
+  ADD_SHIPPING_INFO: 'add_shipping_info',
+  ADD_PAYMENT_INFO: 'add_payment_info',
+  PURCHASE: 'purchase',
+  
+  // User Events
+  SIGN_UP: 'sign_up',
+  LOGIN: 'login',
+  LOGOUT: 'logout',
+  UPDATE_PROFILE: 'update_profile',
+  
+  // Search Events
+  SEARCH: 'search',
+  
+  // Promotion Events
+  VIEW_PROMOTION: 'view_promotion',
+  SELECT_PROMOTION: 'select_promotion',
+  
+  // Error Events
+  ERROR: 'error',
+  
+  // Custom Events
+  OFFLINE_MODE: 'offline_mode',
+  ONLINE_SYNC: 'online_sync',
+  PWA_INSTALL: 'pwa_install',
+  NOTIFICATION_PERMISSION: 'notification_permission',
+} as const;
+
+export type AnalyticsEventType = typeof AnalyticsEvents[keyof typeof AnalyticsEvents];
+
+export class AnalyticsService {
+  static trackPageView(path: string, title?: string) {
+    analytics.trackPageView(path);
+    
+    analytics.trackEvent({
+      category: 'engagement',
+      action: AnalyticsEvents.PAGE_VIEW,
+      label: path,
+      title,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackProductView(productId: string, productName: string, price: number, category?: string) {
+    analytics.trackProductView(productId, productName);
+    
+    analytics.trackEvent({
+      category: 'ecommerce',
+      action: AnalyticsEvents.PRODUCT_VIEW,
+      label: productName,
+      product_id: productId,
+      product_name: productName,
+      price,
+      category,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackAddToCart(productId: string, productName: string, price: number, quantity: number = 1) {
+    analytics.trackAddToCart(productId, productName, price, quantity);
+    
+    analytics.trackEvent({
+      category: 'ecommerce',
+      action: AnalyticsEvents.ADD_TO_CART,
+      label: productName,
+      product_id: productId,
+      product_name: productName,
+      price,
+      quantity,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackBeginCheckout(orderId: string, amount: number, items: Array<{
+    productId: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>) {
+    analytics.trackCheckoutStarted(orderId, amount, items);
+    
+    analytics.trackEvent({
+      category: 'ecommerce',
+      action: AnalyticsEvents.BEGIN_CHECKOUT,
+      label: `Order: ${orderId}`,
+      order_id: orderId,
+      value: amount,
+      currency: 'KES',
+      items: items.map(item => ({
+        item_id: item.productId,
+        item_name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+      })),
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackPurchase(orderId: string, amount: number, items: Array<{
+    productId: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>, paymentMethod: string) {
+    analytics.trackPurchase(orderId, amount, items);
+    
+    analytics.trackEvent({
+      category: 'ecommerce',
+      action: AnalyticsEvents.PURCHASE,
+      label: `Order: ${orderId}`,
+      order_id: orderId,
+      value: amount,
+      currency: 'KES',
+      payment_method: paymentMethod,
+      items: items.map(item => ({
+        item_id: item.productId,
+        item_name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+      })),
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackSearch(query: string, resultsCount: number) {
+    analytics.trackEvent({
+      category: 'search',
+      action: AnalyticsEvents.SEARCH,
+      label: query,
+      search_term: query,
+      results_count: resultsCount,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackUserSignUp(userId: string, method: 'email' | 'social') {
+    analytics.trackEvent({
+      category: 'user',
+      action: AnalyticsEvents.SIGN_UP,
+      label: method,
+      user_id: userId,
+      method,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackError(errorType: string, errorMessage: string, stackTrace?: string) {
+    analytics.trackEvent({
+      category: 'error',
+      action: AnalyticsEvents.ERROR,
+      label: errorType,
+      error_type: errorType,
+      error_message: errorMessage,
+      stack_trace: stackTrace,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackOfflineMode(duration: number, actions: string[]) {
+    analytics.trackEvent({
+      category: 'performance',
+      action: AnalyticsEvents.OFFLINE_MODE,
+      label: 'Offline Usage',
+      duration_seconds: duration,
+      actions_performed: actions,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackPWASupport(features: {
+    installable: boolean;
+    offline: boolean;
+    push: boolean;
+    sync: boolean;
+  }) {
+    analytics.trackEvent({
+      category: 'pwa',
+      action: 'pwa_support',
+      label: 'PWA Capabilities',
+      installable: features.installable,
+      offline_support: features.offline,
+      push_support: features.push,
+      background_sync: features.sync,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackPerformanceMetric(metric: string, value: number, unit: string) {
+    analytics.trackEvent({
+      category: 'performance',
+      action: 'performance_metric',
+      label: metric,
+      metric,
+      value,
+      unit,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackFeatureUsage(feature: string, action: string, details?: Record<string, any>) {
+    analytics.trackEvent({
+      category: 'feature_usage',
+      action,
+      label: feature,
+      feature,
+      ...details,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  static trackConversion(funnel: string, step: string, value?: number) {
+    analytics.trackEvent({
+      category: 'conversion',
+      action: 'funnel_step',
+      label: funnel,
+      funnel,
+      step,
+      value,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}

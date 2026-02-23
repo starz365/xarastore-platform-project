@@ -1,0 +1,42 @@
+'use client';
+
+import { Loader2 } from 'lucide-react';
+
+interface LoadingOverlayProps {
+  isLoading: boolean;
+  text?: string;
+  fullScreen?: boolean;
+  transparent?: boolean;
+}
+
+export function LoadingOverlay({ 
+  isLoading, 
+  text = 'Loading...', 
+  fullScreen = false,
+  transparent = false 
+}: LoadingOverlayProps) {
+  if (!isLoading) return null;
+
+  return (
+    <div className={`${
+      fullScreen 
+        ? 'fixed inset-0 z-50' 
+        : 'absolute inset-0 z-10'
+    } flex items-center justify-center ${
+      transparent 
+        ? 'bg-white/80 backdrop-blur-sm' 
+        : 'bg-white/95'
+    }`}>
+      <div className="text-center">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-gray-200 rounded-full"></div>
+          <div className="absolute top-0 left-0 w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+          <Loader2 className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-6 h-6 text-red-600 animate-pulse" />
+        </div>
+        {text && (
+          <p className="mt-4 text-gray-600 font-medium">{text}</p>
+        )}
+      </div>
+    </div>
+  );
+}

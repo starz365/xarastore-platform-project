@@ -1,0 +1,472 @@
+'use client';
+
+import { useState } from 'react';
+import { Gift, Sparkles, CreditCard, Smartphone, Mail, User, CheckCircle, Share2, Download } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { formatCurrency } from '@/lib/utils/currency';
+
+export const metadata = {
+  title: 'Gift Cards | Xarastore',
+  description: 'Give the perfect gift with Xarastore Gift Cards. Redeemable across millions of products with instant delivery.',
+};
+
+export default function GiftCardsPage() {
+  const [selectedAmount, setSelectedAmount] = useState<number>(1000);
+  const [quantity, setQuantity] = useState<number>(1);
+  const [design, setDesign] = useState<string>('classic');
+  const [recipientEmail, setRecipientEmail] = useState<string>('');
+  const [recipientName, setRecipientName] = useState<string>('');
+  const [message, setMessage] = useState<string>('');
+  const [senderName, setSenderName] = useState<string>('');
+  const [senderEmail, setSenderEmail] = useState<string>('');
+  const [scheduleDate, setScheduleDate] = useState<string>('');
+  const [isCustomAmount, setIsCustomAmount] = useState<boolean>(false);
+  const [customAmount, setCustomAmount] = useState<string>('');
+
+  const predefinedAmounts = [500, 1000, 2000, 5000, 10000, 20000];
+  const totalAmount = isCustomAmount 
+    ? (parseInt(customAmount) || 0) * quantity 
+    : selectedAmount * quantity;
+
+  const designs = [
+    { id: 'classic', name: 'Classic Red', color: 'bg-red-600', description: 'Elegant red design' },
+    { id: 'premium', name: 'Premium Gold', color: 'bg-yellow-500', description: 'Luxury gold theme' },
+    { id: 'festive', name: 'Festive', color: 'bg-gradient-to-r from-red-600 to-pink-600', description: 'Celebration theme' },
+    { id: 'corporate', name: 'Corporate', color: 'bg-gradient-to-r from-gray-800 to-gray-900', description: 'Professional design' },
+  ];
+
+  const handleAmountSelect = (amount: number) => {
+    setSelectedAmount(amount);
+    setIsCustomAmount(false);
+  };
+
+  const handleCustomAmountFocus = () => {
+    setIsCustomAmount(true);
+  };
+
+  const handleCheckout = () => {
+    // In production, this would redirect to checkout
+    alert(`Proceeding to checkout for ${quantity} gift card${quantity > 1 ? 's' : ''} worth ${formatCurrency(totalAmount)}`);
+  };
+
+  const handleShare = async () => {
+    const shareData = {
+      title: 'Xarastore Gift Card',
+      text: `I'm sending you a ${formatCurrency(selectedAmount)} Xarastore Gift Card!`,
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        alert('Link copied to clipboard!');
+      }
+    } catch (error) {
+      console.error('Share failed:', error);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-red-50 to-white">
+      {/* Hero Section */}
+      <section className="bg-gradient-to-r from-red-600 to-red-800 text-white">
+        <div className="container-responsive py-12 md:py-20">
+          <div className="max-w-4xl">
+            <div className="flex items-center space-x-3 mb-6">
+              <Gift className="w-8 h-8" />
+              <span className="text-lg font-semibold bg-white/20 px-4 py-1 rounded-full">
+                THE PERFECT GIFT
+              </span>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-6">
+              Give the Gift of
+              <span className="block text-white">Choice</span>
+            </h1>
+            <p className="text-xl opacity-90 mb-8 max-w-2xl">
+              Xarastore Gift Cards let them choose from millions of products. 
+              Instant delivery, never expires, and redeemable across all categories.
+            </p>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-medium">Instant Delivery</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-medium">No Expiration</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-medium">Redeemable Everywhere</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="container-responsive py-8">
+        <div className="grid lg:grid-cols-2 gap-12">
+          {/* Left Column - Gift Card Builder */}
+          <div>
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-8">Create Your Gift Card</h2>
+
+              {/* Amount Selection */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Amount</h3>
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {predefinedAmounts.map((amount) => (
+                    <button
+                      key={amount}
+                      onClick={() => handleAmountSelect(amount)}
+                      className={`py-4 rounded-lg border-2 transition-all ${
+                        selectedAmount === amount && !isCustomAmount
+                          ? 'border-red-600 bg-red-50 text-red-700 font-bold'
+                          : 'border-gray-300 hover:border-red-300 hover:bg-red-50'
+                      }`}
+                    >
+                      {formatCurrency(amount)}
+                    </button>
+                  ))}
+                </div>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    value={isCustomAmount ? customAmount : ''}
+                    onChange={(e) => setCustomAmount(e.target.value)}
+                    onFocus={handleCustomAmountFocus}
+                    placeholder="Enter custom amount (KES 500 - 100,000)"
+                    className="pl-12"
+                    min="500"
+                    max="100000"
+                  />
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500">KES</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quantity */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quantity</h3>
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center border border-gray-300 rounded-lg">
+                    <button
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      className="px-4 py-3 text-gray-600 hover:text-gray-900"
+                    >
+                      -
+                    </button>
+                    <span className="px-6 py-3 font-medium">{quantity}</span>
+                    <button
+                      onClick={() => setQuantity(quantity + 1)}
+                      className="px-4 py-3 text-gray-600 hover:text-gray-900"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <span className="text-gray-600">
+                    {quantity} gift card{quantity > 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+
+              {/* Design Selection */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Choose Design</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {designs.map((designOption) => (
+                    <button
+                      key={designOption.id}
+                      onClick={() => setDesign(designOption.id)}
+                      className={`p-4 rounded-xl border-2 transition-all ${
+                        design === designOption.id
+                          ? 'border-red-600 ring-2 ring-red-600/20'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-10 h-10 ${designOption.color} rounded-lg`} />
+                        <div className="text-left">
+                          <div className="font-medium">{designOption.name}</div>
+                          <div className="text-sm text-gray-600">{designOption.description}</div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recipient Details */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Recipient Details</h3>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Recipient's Name
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <User className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <Input
+                          value={recipientName}
+                          onChange={(e) => setRecipientName(e.target.value)}
+                          placeholder="John Doe"
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Recipient's Email *
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Mail className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <Input
+                          type="email"
+                          value={recipientEmail}
+                          onChange={(e) => setRecipientEmail(e.target.value)}
+                          placeholder="john@example.com"
+                          required
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Personal Message (Optional)
+                    </label>
+                    <textarea
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      rows={3}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-red-600 focus:ring-2 focus:ring-red-600/20 outline-none"
+                      placeholder="Add a personal message..."
+                      maxLength={200}
+                    />
+                    <div className="text-right text-sm text-gray-500 mt-1">
+                      {message.length}/200 characters
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Delivery Options */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Delivery Options</h3>
+                <div className="space-y-3">
+                  <label className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="delivery"
+                      defaultChecked
+                      className="text-red-600 focus:ring-red-600"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium">Send Instantly</div>
+                      <div className="text-sm text-gray-600">Email delivered immediately after purchase</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="delivery"
+                      className="text-red-600 focus:ring-red-600"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium">Schedule Delivery</div>
+                      <div className="text-sm text-gray-600">Choose a specific date and time</div>
+                      <input
+                        type="datetime-local"
+                        value={scheduleDate}
+                        onChange={(e) => setScheduleDate(e.target.value)}
+                        className="mt-2 px-3 py-2 border border-gray-300 rounded text-sm w-full"
+                        min={new Date().toISOString().slice(0, 16)}
+                      />
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Preview & Checkout */}
+          <div>
+            {/* Preview */}
+            <div className="bg-gradient-to-br from-red-600 to-red-800 text-white rounded-2xl p-8 mb-8">
+              <div className="text-center mb-8">
+                <Sparkles className="w-12 h-12 mx-auto mb-4" />
+                <h3 className="text-2xl font-bold mb-2">Gift Card Preview</h3>
+                <p className="opacity-90">This is what your recipient will see</p>
+              </div>
+              
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <div className="text-sm opacity-80">Xarastore Gift Card</div>
+                    <div className="text-3xl font-bold">
+                      {isCustomAmount && customAmount ? formatCurrency(parseInt(customAmount)) : formatCurrency(selectedAmount)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm opacity-80">Valid Until</div>
+                    <div className="text-lg font-bold">Never Expires</div>
+                  </div>
+                </div>
+                <div className="border-t border-white/20 pt-4">
+                  <div className="text-sm mb-2">To: {recipientName || 'Recipient Name'}</div>
+                  {message && (
+                    <div className="text-sm italic opacity-90">"{message.substring(0, 60)}{message.length > 60 ? '...' : ''}"</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="text-center">
+                <div className="text-sm opacity-80 mb-2">Gift Card Code</div>
+                <div className="text-2xl font-mono font-bold tracking-widest bg-white/20 rounded-lg py-3 px-6">
+                  XARA-{Math.random().toString(36).substr(2, 8).toUpperCase()}
+                </div>
+              </div>
+            </div>
+
+            {/* Order Summary */}
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 mb-8">
+              <h3 className="text-xl font-bold text-gray-900 mb-6">Order Summary</h3>
+              <div className="space-y-4">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Gift Card Amount</span>
+                  <span className="font-medium">
+                    {isCustomAmount && customAmount ? formatCurrency(parseInt(customAmount)) : formatCurrency(selectedAmount)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Quantity</span>
+                  <span className="font-medium">{quantity}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Design</span>
+                  <span className="font-medium">
+                    {designs.find(d => d.id === design)?.name}
+                  </span>
+                </div>
+                <div className="border-t border-gray-200 pt-4">
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>Total Amount</span>
+                    <span className="text-red-600">{formatCurrency(totalAmount)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Methods */}
+              <div className="mt-8">
+                <h4 className="font-semibold text-gray-900 mb-4">Payment Methods</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <button className="p-4 border border-gray-300 rounded-lg hover:border-red-300 hover:bg-red-50 transition-colors">
+                    <div className="flex items-center justify-center space-x-2">
+                      <CreditCard className="w-5 h-5" />
+                      <span>Credit Card</span>
+                    </div>
+                  </button>
+                  <button className="p-4 border border-gray-300 rounded-lg hover:border-red-300 hover:bg-red-50 transition-colors">
+                    <div className="flex items-center justify-center space-x-2">
+                      <Smartphone className="w-5 h-5" />
+                      <span>M-Pesa</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-8 space-y-4">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="w-full"
+                  onClick={handleCheckout}
+                  disabled={!recipientEmail || totalAmount <= 0}
+                >
+                  <CreditCard className="w-5 h-5 mr-2" />
+                  Buy Now - {formatCurrency(totalAmount)}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  className="w-full"
+                  onClick={handleShare}
+                >
+                  <Share2 className="w-5 h-5 mr-2" />
+                  Share Gift Card
+                </Button>
+              </div>
+            </div>
+
+            {/* Features */}
+            <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-2xl p-8">
+              <h3 className="text-xl font-bold text-gray-900 mb-6">Gift Card Features</h3>
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-medium">Instant Delivery</div>
+                    <div className="text-sm text-gray-600">Email delivery within minutes</div>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-medium">Never Expires</div>
+                    <div className="text-sm text-gray-600">No expiration dates or fees</div>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-medium">Redeemable Everywhere</div>
+                    <div className="text-sm text-gray-600">Use across all categories on Xarastore</div>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-medium">Balance Check</div>
+                    <div className="text-sm text-gray-600">Check remaining balance anytime</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bulk Orders */}
+      <section className="py-16 bg-gray-50">
+        <div className="container-responsive">
+          <div className="max-w-4xl mx-auto text-center">
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">Need Bulk Gift Cards?</h2>
+            <p className="text-gray-600 mb-8 max-w-2xl mx-auto">
+              Perfect for corporate gifting, employee rewards, or customer loyalty programs. 
+              Get customized designs and volume discounts.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button variant="primary" size="lg">
+                <Download className="w-5 h-5 mr-2" />
+                Download Corporate Catalog
+              </Button>
+              <Button variant="secondary" size="lg">
+                Contact Sales Team
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}

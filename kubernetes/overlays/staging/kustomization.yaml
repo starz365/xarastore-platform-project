@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: xarastore-staging
+nameSuffix: -staging
+commonLabels:
+  environment: staging
+  branch: staging
+patchesStrategicMerge:
+  - deployment-patch.yaml
+  - configmap-patch.yaml
+resources:
+  - ../../base
+images:
+  - name: xarastore
+    newName: ghcr.io/xarastore/xarastore-app
+    newTag: staging
+configMapGenerator:
+  - name: xarastore-config
+    behavior: merge
+    literals:
+      - NODE_ENV=staging
+      - LOG_LEVEL=info
+      - SENTRY_ENVIRONMENT=staging
+      - CORS_ORIGIN=https://staging.xarastore.com
+secretGenerator:
+  - name: xarastore-secrets
+    behavior: replace
+    envs:
+      - .env.staging

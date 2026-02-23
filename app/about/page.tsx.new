@@ -1,0 +1,37 @@
+import { CompanyOverview } from '@/components/about/CompanyOverview';
+import { ValuesSection } from '@/components/about/ValuesSection';
+import { TeamSection } from '@/components/about/TeamSection';
+import { CareersSection } from '@/components/about/CareersSection';
+
+export const metadata = {
+  title: 'About Xarastore | Our Story, Mission & Values',
+  description: 'Learn about Xarastore - Kenya\'s fastest-growing online marketplace. Our mission, values, team, and commitment to customers.',
+};
+
+export default function AboutPage() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Hero */}
+      <div className="bg-gradient-to-r from-red-600 to-red-800 text-white">
+        <div className="container-responsive py-12 md:py-16">
+          <div className="max-w-3xl">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+              About Xarastore
+            </h1>
+            <p className="text-xl opacity-90">
+              Redefining online shopping in Kenya through innovation, trust, and exceptional value.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="container-responsive py-8">
+        <CompanyOverview />
+        <ValuesSection />
+        <TeamSection />
+        <CareersSection />
+      </div>
+    </div>
+  );
+}

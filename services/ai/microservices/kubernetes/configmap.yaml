@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-config
+  namespace: xarastore-ai
+data:
+  redis_url: "redis://redis-service:6379"
+  elasticsearch_url: "http://elasticsearch-service:9200"
+  model_update_interval: "3600"
+  batch_size: "100"
+  feature_store_refresh: "300"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-models
+  namespace: xarastore-ai
+data:
+  recommendations_model: "collaborative_filtering_v2.pkl"
+  search_model: "bert_product_search_v1.pkl"
+  pricing_model: "xgboost_pricing_v3.pkl"
+  fraud_model: "isolation_forest_fraud_v2.pkl"
+  vision_model: "resnet50_product_v1.pth"

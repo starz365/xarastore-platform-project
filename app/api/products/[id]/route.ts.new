@@ -1,0 +1,199 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase/client';
+import { z } from 'zod';
+
+const paramsSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    
+    // Validate ID
+    const validation = paramsSchema.safeParse({ id });
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: 'Invalid product ID', details: validation.error.errors },
+        { status: 400 }
+      );
+    }
+
+    // Fetch product with all related data
+    const { data: product, error } = await supabase
+      .from('products')
+      .select(`
+        *,
+        brand:brands(*),
+        category:categories(*),
+        variants:product_variants(*),
+        reviews:reviews(
+          id,
+          rating,
+          title,
+          comment,
+          images,
+          is_verified,
+          created_at,
+          user:users(full_name, avatar_url)
+        )
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return NextResponse.json(
+          { error: 'Product not found' },
+          { status: 404 }
+        );
+      }
+      throw error;
+    }
+
+    if (!product) {
+      return NextResponse.json(
+        { error: 'Product not found' },
+        { status: 404 }
+      );
+    }
+
+    // Transform product data
+    const transformedProduct = {
+      id: product.id,
+      slug: product.slug,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      originalPrice: product.original_price,
+      sku: product.sku,
+      brand: {
+        id: product.brand.id,
+        slug: product.brand.slug,
+        name: product.brand.name,
+        logo: product.brand.logo,
+        description: product.brand.description,
+      },
+      category: {
+        id: product.category.id,
+        slug: product.category.slug,
+        name: product.category.name,
+        description: product.category.description,
+      },
+      images: product.images || [],
+      variants: product.variants?.map((variant: any) => ({
+        id: variant.id,
+        name: variant.name,
+        price: variant.price,
+        originalPrice: variant.original_price,
+        sku: variant.sku,
+        stock: variant.stock,
+        attributes: variant.attributes || {},
+      })) || [],
+      specifications: product.specifications || {},
+      rating: product.rating,
+      reviewCount: product.review_count,
+      stock: product.stock,
+      isFeatured: product.is_featured,
+      isDeal: product.is_deal,
+      dealEndsAt: product.deal_ends_at,
+      createdAt: product.created_at,
+      updatedAt: product.updated_at,
+      reviews: product.reviews?.map((review: any) => ({
+        id: review.id,
+        rating: review.rating,
+        title: review.title,
+        comment: review.comment,
+        images: review.images || [],
+        isVerified: review.is_verified,
+        createdAt: review.created_at,
+        user: review.user ? {
+          name: review.user.full_name,
+          avatar: review.user.avatar_url,
+        } : null,
+      })) || [],
+    };
+
+    // Get related products
+    const { data: relatedProducts } = await supabase
+      .from('products')
+      .select(`
+        id,
+        slug,
+        name,
+        price,
+        original_price,
+        images,
+        rating,
+        review_count,
+        stock,
+        brand:brands(name, slug),
+        category:categories(name, slug)
+      `)
+      .eq('category_id', product.category_id)
+      .neq('id', product.id)
+      .gt('stock', 0)
+      .order('rating', { ascending: false })
+      .limit(4);
+
+    const response = {
+      success: true,
+      data: {
+        product: transformedProduct,
+        related: relatedProducts?.map(p => ({
+          id: p.id,
+          slug: p.slug,
+          name: p.name,
+          price: p.price,
+          originalPrice: p.original_price,
+          images: p.images || [],
+          rating: p.rating,
+          reviewCount: p.review_count,
+          stock: p.stock,
+          brand: p.brand,
+          category: p.category,
+        })) || [],
+      },
+      meta: {
+        timestamp: new Date().toISOString(),
+        cache: 'miss',
+      },
+    };
+
+    // Set cache headers based on stock status
+    const cacheControl = product.stock > 0 
+      ? 'public, max-age=300, s-maxage=600, stale-while-revalidate=3600'
+      : 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800';
+
+    return NextResponse.json(response, {
+      status: 200,
+      headers: {
+        'Cache-Control': cacheControl,
+        'ETag': `"${product.updated_at}"`,
+        'X-Product-ID': product.id,
+      },
+    });
+  } catch (error: any) {
+    console.error('Product API error:', error);
+    
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to fetch product',
+        message: error.message,
+      },
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      }
+    );
+  }
+}

@@ -1,0 +1,178 @@
+xarastore/
+├── .env.local
+├── .env.production
+├── .gitignore
+├── package.json
+├── pwa-assets.config.js
+├── next.config.js
+├── middleware.ts
+├── public/
+│   ├── manifest.json
+│   ├── service-worker.js
+│   ├── offline.html
+│   ├── icons/
+│   └── images/
+├── app/
+│   ├── layout.tsx
+│   ├── page.tsx
+│   ├── not-found.tsx
+│   ├── globals.css
+│   ├── providers.tsx
+│   ├── error.tsx
+│   ├── loading.tsx
+│   ├── 400/
+│   │   └── page.tsx
+│   ├── 500/
+│   │   └── page.tsx
+│   ├── offline/
+│   │   └── page.tsx
+│   ├── shop/
+│   │   └── page.tsx
+│   ├── category/
+│   │   └── [slug]/
+│   │       └── page.tsx
+│   ├── product/
+│   │   └── [slug]/
+│   │       └── page.tsx
+│   ├── search/
+│   │   └── page.tsx
+│   ├── brands/
+│   │   └── [slug]/
+│   │       └── page.tsx
+│   ├── collections/
+│   │   └── [slug]/
+│   │       └── page.tsx
+│   ├── deals/
+│   │   └── page.tsx
+│   ├── cart/
+│   │   └── page.tsx
+│   ├── checkout/
+│   │   ├── page.tsx
+│   │   ├── address/
+│   │   │   └── page.tsx
+│   │   ├── delivery/
+│   │   │   └── page.tsx
+│   │   ├── payment/
+│   │   │   └── page.tsx
+│   │   └── confirmation/
+│   │       └── page.tsx
+│   ├── account/
+│   │   ├── page.tsx
+│   │   ├── orders/
+│   │   │   └── page.tsx
+│   │   ├── wishlist/
+│   │   │   └── page.tsx
+│   │   ├── wardrobe/
+│   │   │   └── page.tsx
+│   │   ├── addresses/
+│   │   │   └── page.tsx
+│   │   └── profile/
+│   │       └── page.tsx
+│   ├── help/
+│   │   └── page.tsx
+│   └── legal/
+│       ├── page.tsx
+│       ├── terms/
+│       │   └── page.tsx
+│       ├── privacy/
+│       │   └── page.tsx
+│       └── shipping/
+│           └── page.tsx
+├── components/
+│   ├── layout/
+│   │   ├── Header.tsx
+│   │   ├── Footer.tsx
+│   │   ├── MobileNavigation.tsx
+│   │   └── MegaMenu.tsx
+│   ├── ui/
+│   │   ├── Button.tsx
+│   │   ├── Input.tsx
+│   │   ├── Card.tsx
+│   │   ├── Badge.tsx
+│   │   ├── Skeleton.tsx
+│   │   ├── PriceDisplay.tsx
+│   │   ├── Rating.tsx
+│   │   └── LoadingSpinner.tsx
+│   ├── product/
+│   │   ├── ProductCard.tsx
+│   │   ├── ProductGrid.tsx
+│   │   ├── ProductImageGallery.tsx
+│   │   ├── ProductVariants.tsx
+│   │   └── ProductReviews.tsx
+│   ├── cart/
+│   │   ├── CartItem.tsx
+│   │   ├── CartSummary.tsx
+│   │   └── CartFlyout.tsx
+│   ├── search/
+│   │   ├── SearchBar.tsx
+│   │   ├── SearchFilters.tsx
+│   │   └── SearchResults.tsx
+│   ├── checkout/
+│   │   ├── CheckoutSteps.tsx
+│   │   ├── PaymentMethods.tsx
+│   │   └── OrderSummary.tsx
+│   └── shared/
+│       ├── OfflineIndicator.tsx
+│       ├── NetworkStatus.tsx
+│       ├── ErrorBoundary.tsx
+│       └── Toast.tsx
+├── lib/
+│   ├── supabase/
+│   │   ├── client.ts
+│   │   ├── server.ts
+│   │   ├── schemas/
+│   │   │   ├── products.ts
+│   │   │   ├── auth.ts
+│   │   │   ├── orders.ts
+│   │   │   └── reviews.ts
+│   │   └── queries/
+│   │       ├── products.ts
+│   │       ├── categories.ts
+│   │       └── user.ts
+│   ├── utils/
+│   │   ├── currency.ts
+│   │   ├── formatters.ts
+│   │   ├── validators.ts
+│   │   ├── offline.ts
+│   │   └── performance.ts
+│   ├── hooks/
+│   │   ├── useCart.ts
+│   │   ├── useDebounce.ts
+│   │   ├── useLocalStorage.ts
+│   │   ├── useNetworkStatus.ts
+│   │   └── useIntersectionObserver.ts
+│   └── constants/
+│       ├── design-tokens.ts
+│       ├── navigation.ts
+│       └── error-codes.ts
+├── services/
+│   ├── cache/
+│   │   ├── redis.ts
+│   │   └── memory.ts
+│   ├── search/
+│   │   ├── client.ts
+│   │   └── indexing.ts
+│   ├── payment/
+│   │   ├── providers/
+│   │   │   ├── mpesa.ts
+│   │   │   ├── stripe.ts
+│   │   │   └── paypal.ts
+│   │   └── processor.ts
+│   └── analytics/
+│       ├── tracker.ts
+│       └── events.ts
+├── types/
+│   ├── index.ts
+│   ├── product.ts
+│   ├── cart.ts
+│   └── user.ts
+├── styles/
+│   └── design-tokens.css
+├── scripts/
+│   ├── generate-sitemap.ts
+│   ├── seed-database.ts
+│   └── optimize-images.ts
+└── tests/
+    ├── e2e/
+    ├── integration/
+    └── unit/

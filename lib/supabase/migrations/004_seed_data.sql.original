@@ -1,0 +1,605 @@
+-- Seed data for Xarastore e-commerce platform
+-- Note: In production, this would be run via migration tools
+
+-- Insert default categories
+INSERT INTO categories (id, slug, name, description, image, icon, sort_order, is_active) VALUES
+-- Electronics
+('11111111-1111-1111-1111-111111111111', 'electronics', 'Electronics', 'Latest gadgets and electronics', 'https://cdn.xarastore.com/categories/electronics.jpg', '📱', 1, true),
+('22222222-2222-2222-2222-222222222222', 'smartphones', 'Smartphones', 'Latest smartphones and accessories', 'https://cdn.xarastore.com/categories/smartphones.jpg', '📱', 2, true),
+('33333333-3333-3333-3333-333333333333', 'laptops', 'Laptops & Computers', 'Computers, laptops, and accessories', 'https://cdn.xarastore.com/categories/laptops.jpg', '💻', 3, true),
+('44444444-4444-4444-4444-444444444444', 'audio', 'Audio & Headphones', 'Headphones, speakers, and audio equipment', 'https://cdn.xarastore.com/categories/audio.jpg', '🎧', 4, true),
+
+-- Fashion
+('55555555-5555-5555-5555-555555555555', 'fashion', 'Fashion', 'Clothing, shoes, and accessories', 'https://cdn.xarastore.com/categories/fashion.jpg', '👕', 5, true),
+('66666666-6666-6666-6666-666666666666', 'mens-fashion', 'Men''s Fashion', 'Men''s clothing and accessories', 'https://cdn.xarastore.com/categories/mens-fashion.jpg', '👔', 6, true),
+('77777777-7777-7777-7777-777777777777', 'womens-fashion', 'Women''s Fashion', 'Women''s clothing and accessories', 'https://cdn.xarastore.com/categories/womens-fashion.jpg', '👗', 7, true),
+('88888888-8888-8888-8888-888888888888', 'shoes', 'Shoes & Footwear', 'All types of footwear', 'https://cdn.xarastore.com/categories/shoes.jpg', '👟', 8, true),
+
+-- Home & Living
+('99999999-9999-9999-9999-999999999999', 'home-living', 'Home & Living', 'Home appliances and living essentials', 'https://cdn.xarastore.com/categories/home-living.jpg', '🏠', 9, true),
+('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'kitchen', 'Kitchen & Dining', 'Kitchen appliances and diningware', 'https://cdn.xarastore.com/categories/kitchen.jpg', '🍽️', 10, true),
+('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'furniture', 'Furniture', 'Home and office furniture', 'https://cdn.xarastore.com/categories/furniture.jpg', '🛋️', 11, true),
+
+-- Beauty & Health
+('cccccccc-cccc-cccc-cccc-cccccccccccc', 'beauty-health', 'Beauty & Health', 'Cosmetics, skincare, and health products', 'https://cdn.xarastore.com/categories/beauty-health.jpg', '💄', 12, true),
+('dddddddd-dddd-dddd-dddd-dddddddddddd', 'skincare', 'Skincare', 'Face and body skincare products', 'https://cdn.xarastore.com/categories/skincare.jpg', '🧴', 13, true),
+('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'makeup', 'Makeup', 'Cosmetics and makeup products', 'https://cdn.xarastore.com/categories/makeup.jpg', '💋', 14, true),
+
+-- Sports & Outdoors
+('ffffffff-ffff-ffff-ffff-ffffffffffff', 'sports-outdoors', 'Sports & Outdoors', 'Sports equipment and outdoor gear', 'https://cdn.xarastore.com/categories/sports-outdoors.jpg', '⚽', 15, true),
+('12345678-1234-1234-1234-123456789012', 'fitness', 'Fitness Equipment', 'Exercise and fitness equipment', 'https://cdn.xarastore.com/categories/fitness.jpg', '🏋️', 16, true),
+('23456789-2345-2345-2345-234567890123', 'outdoor', 'Outdoor Gear', 'Camping and outdoor equipment', 'https://cdn.xarastore.com/categories/outdoor.jpg', '🏕️', 17, true),
+
+-- Automotive
+('34567890-3456-3456-3456-345678901234', 'automotive', 'Automotive', 'Car accessories and automotive parts', 'https://cdn.xarastore.com/categories/automotive.jpg', '🚗', 18, true),
+('45678901-4567-4567-4567-456789012345', 'car-accessories', 'Car Accessories', 'Car interior and exterior accessories', 'https://cdn.xarastore.com/categories/car-accessories.jpg', '🚙', 19, true),
+
+-- Groceries
+('56789012-5678-5678-5678-567890123456', 'groceries', 'Groceries', 'Food and household essentials', 'https://cdn.xarastore.com/categories/groceries.jpg', '🛒', 20, true),
+('67890123-6789-6789-6789-678901234567', 'beverages', 'Beverages', 'Drinks and beverages', 'https://cdn.xarastore.com/categories/beverages.jpg', '🥤', 21, true),
+
+-- Books & Stationery
+('78901234-7890-7890-7890-789012345678', 'books-stationery', 'Books & Stationery', 'Books, office supplies, and stationery', 'https://cdn.xarastore.com/categories/books-stationery.jpg', '📚', 22, true),
+('89012345-8901-8901-8901-890123456789', 'toys-games', 'Toys & Games', 'Toys, games, and entertainment', 'https://cdn.xarastore.com/categories/toys-games.jpg', '🎮', 23, true)
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    image = EXCLUDED.image,
+    icon = EXCLUDED.icon,
+    sort_order = EXCLUDED.sort_order,
+    is_active = EXCLUDED.is_active;
+
+-- Update parent-child relationships
+UPDATE categories SET parent_id = '11111111-1111-1111-1111-111111111111' WHERE slug IN ('smartphones', 'laptops', 'audio');
+UPDATE categories SET parent_id = '55555555-5555-5555-5555-555555555555' WHERE slug IN ('mens-fashion', 'womens-fashion', 'shoes');
+UPDATE categories SET parent_id = '99999999-9999-9999-9999-999999999999' WHERE slug IN ('kitchen', 'furniture');
+UPDATE categories SET parent_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc' WHERE slug IN ('skincare', 'makeup');
+UPDATE categories SET parent_id = 'ffffffff-ffff-ffff-ffff-ffffffffffff' WHERE slug IN ('fitness', 'outdoor');
+UPDATE categories SET parent_id = '34567890-3456-3456-3456-345678901234' WHERE slug = 'car-accessories';
+UPDATE categories SET parent_id = '56789012-5678-5678-5678-567890123456' WHERE slug = 'beverages';
+
+-- Insert default brands
+INSERT INTO brands (id, slug, name, description, logo, website, is_active) VALUES
+-- Electronics brands
+('11111111-1111-1111-1111-111111111111', 'apple', 'Apple', 'Premium electronics and technology', 'https://cdn.xarastore.com/brands/apple.png', 'https://apple.com', true),
+('22222222-2222-2222-2222-222222222222', 'samsung', 'Samsung', 'Innovative electronics and appliances', 'https://cdn.xarastore.com/brands/samsung.png', 'https://samsung.com', true),
+('33333333-3333-3333-3333-333333333333', 'sony', 'Sony', 'Entertainment and electronics', 'https://cdn.xarastore.com/brands/sony.png', 'https://sony.com', true),
+('44444444-4444-4444-4444-444444444444', 'hp', 'HP', 'Computers and printers', 'https://cdn.xarastore.com/brands/hp.png', 'https://hp.com', true),
+('55555555-5555-5555-5555-555555555555', 'dell', 'Dell', 'Computers and technology solutions', 'https://cdn.xarastore.com/brands/dell.png', 'https://dell.com', true),
+
+-- Fashion brands
+('66666666-6666-6666-6666-666666666666', 'nike', 'Nike', 'Athletic apparel and footwear', 'https://cdn.xarastore.com/brands/nike.png', 'https://nike.com', true),
+('77777777-7777-7777-7777-777777777777', 'adidas', 'Adidas', 'Sports apparel and footwear', 'https://cdn.xarastore.com/brands/adidas.png', 'https://adidas.com', true),
+('88888888-8888-8888-8888-888888888888', 'zara', 'Zara', 'Fashion clothing and accessories', 'https://cdn.xarastore.com/brands/zara.png', 'https://zara.com', true),
+('99999999-9999-9999-9999-999999999999', 'hugo-boss', 'Hugo Boss', 'Premium fashion and fragrances', 'https://cdn.xarastore.com/brands/hugo-boss.png', 'https://hugoboss.com', true),
+
+-- Home brands
+('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'ikea', 'IKEA', 'Affordable home furniture and accessories', 'https://cdn.xarastore.com/brands/ikea.png', 'https://ikea.com', true),
+('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'kitchenaid', 'KitchenAid', 'Premium kitchen appliances', 'https://cdn.xarastore.com/brands/kitchenaid.png', 'https://kitchenaid.com', true),
+
+-- Beauty brands
+('cccccccc-cccc-cccc-cccc-cccccccccccc', 'loreal', 'L''Oréal', 'Beauty and cosmetics', 'https://cdn.xarastore.com/brands/loreal.png', 'https://loreal.com', true),
+('dddddddd-dddd-dddd-dddd-dddddddddddd', 'estee-lauder', 'Estée Lauder', 'Luxury skincare and makeup', 'https://cdn.xarastore.com/brands/estee-lauder.png', 'https://esteelauder.com', true),
+
+-- Local Kenyan brands
+('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'kingsway', 'Kingsway', 'Kenyan fashion and textiles', 'https://cdn.xarastore.com/brands/kingsway.png', 'https://kingsway.co.ke', true),
+('ffffffff-ffff-ffff-ffff-ffffffffffff', 'nakumatt', 'Nakumatt', 'Kenyan supermarket chain', 'https://cdn.xarastore.com/brands/nakumatt.png', 'https://nakumatt.com', true),
+('12345678-1234-1234-1234-123456789012', 'safaricom', 'Safaricom', 'Kenyan telecommunications', 'https://cdn.xarastore.com/brands/safaricom.png', 'https://safaricom.co.ke', true),
+
+-- Sports brands
+('23456789-2345-2345-2345-234567890123', 'puma', 'Puma', 'Sports apparel and footwear', 'https://cdn.xarastore.com/brands/puma.png', 'https://puma.com', true),
+('34567890-3456-3456-3456-345678901234', 'under-armour', 'Under Armour', 'Performance athletic wear', 'https://cdn.xarastore.com/brands/under-armour.png', 'https://underarmour.com', true),
+
+-- Automotive brands
+('45678901-4567-4567-4567-456789012345', 'bosch', 'Bosch', 'Automotive parts and tools', 'https://cdn.xarastore.com/brands/bosch.png', 'https://bosch.com', true),
+('56789012-5678-5678-5678-567890123456', 'michelin', 'Michelin', 'Tires and automotive products', 'https://cdn.xarastore.com/brands/michelin.png', 'https://michelin.com', true)
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    logo = EXCLUDED.logo,
+    website = EXCLUDED.website,
+    is_active = EXCLUDED.is_active;
+
+-- Insert default settings
+INSERT INTO settings (key, value, category, description, is_public) VALUES
+-- Store information
+('store.name', '"Xarastore"', 'store', 'Store name', true),
+('store.tagline', '"it''s a deal"', 'store', 'Store tagline', true),
+('store.email', '"support@xarastore.com"', 'store', 'Store contact email', true),
+('store.phone', '"0700 000 000"', 'store', 'Store contact phone', true),
+('store.address', '{"street": "Moi Avenue", "city": "Nairobi", "state": "Nairobi County", "postalCode": "00100", "country": "Kenya"}', 'store', 'Store address', true),
+('store.currency', '"KES"', 'store', 'Default currency', true),
+('store.timezone', '"Africa/Nairobi"', 'store', 'Store timezone', true),
+
+-- Shipping settings
+('shipping.free_threshold', '2000', 'shipping', 'Minimum order amount for free shipping', true),
+('shipping.standard_price', '299', 'shipping', 'Standard shipping price', true),
+('shipping.express_price', '699', 'shipping', 'Express shipping price', true),
+('shipping.same_day_price', '999', 'shipping', 'Same day shipping price', true),
+('shipping.standard_days', '3-5', 'shipping', 'Standard delivery days', true),
+('shipping.express_days', '1-2', 'shipping', 'Express delivery days', true),
+('shipping.supported_countries', '["Kenya", "Uganda", "Tanzania", "Rwanda"]', 'shipping', 'Supported countries for shipping', true),
+
+-- Tax settings
+('tax.rate', '16', 'tax', 'Default tax rate (%)', true),
+('tax.inclusive', 'true', 'tax', 'Whether prices include tax', true),
+
+-- Payment settings
+('payment.methods', '["mpesa", "card", "bank"]', 'payment', 'Enabled payment methods', true),
+('payment.mpesa_business_number', '"123456"', 'payment', 'M-Pesa business number', false),
+('payment.stripe_publishable_key', '"pk_test_..."', 'payment', 'Stripe publishable key', false),
+('payment.stripe_secret_key', '"sk_test_..."', 'payment', 'Stripe secret key', false),
+
+-- Feature flags
+('features.guest_checkout', 'true', 'features', 'Allow guest checkout', false),
+('features.wishlist', 'true', 'features', 'Enable wishlist feature', true),
+('features.reviews', 'true', 'features', 'Enable product reviews', true),
+('features.ratings', 'true', 'features', 'Enable product ratings', true),
+('features.comparison', 'true', 'features', 'Enable product comparison', true),
+('features.quick_view', 'true', 'features', 'Enable quick view', true),
+
+-- SEO settings
+('seo.default_title', 'Xarastore - it''s a deal', 'seo', 'Default page title', true),
+('seo.default_description', 'Shop the best deals on electronics, fashion, home goods, and more. Kenya''s fastest-growing online marketplace.', 'seo', 'Default meta description', true),
+('seo.default_keywords', '["online shopping", "Kenya", "deals", "electronics", "fashion", "home goods"]', 'seo', 'Default meta keywords', true),
+('seo.google_analytics_id', '"UA-XXXXX-Y"', 'seo', 'Google Analytics tracking ID', false),
+
+-- Social media
+('social.facebook', '"https://facebook.com/xarastore"', 'social', 'Facebook page URL', true),
+('social.twitter', '"https://twitter.com/xarastore"', 'social', 'Twitter profile URL', true),
+('social.instagram', '"https://instagram.com/xarastore"', 'social', 'Instagram profile URL', true),
+('social.tiktok', '"https://tiktok.com/@xarastore"', 'social', 'TikTok profile URL', true),
+
+-- Email settings
+('email.smtp_host', '"smtp.gmail.com"', 'email', 'SMTP host', false),
+('email.smtp_port', '587', 'email', 'SMTP port', false),
+('email.smtp_username', '"noreply@xarastore.com"', 'email', 'SMTP username', false),
+('email.smtp_password', '""', 'email', 'SMTP password', false),
+('email.from_name', '"Xarastore Support"', 'email', 'Default from name', false),
+('email.from_email', '"support@xarastore.com"', 'email', 'Default from email', false),
+
+-- Maintenance settings
+('maintenance.mode', 'false', 'maintenance', 'Maintenance mode status', true),
+('maintenance.message', 'We''re currently performing maintenance. We''ll be back soon!', 'maintenance', 'Maintenance mode message', true),
+
+-- Cache settings
+('cache.ttl', '3600', 'cache', 'Default cache TTL in seconds', false),
+('cache.enabled', 'true', 'cache', 'Enable caching', false),
+
+-- Security settings
+('security.login_attempts', '5', 'security', 'Max login attempts before lockout', false),
+('security.lockout_duration', '900', 'security', 'Lockout duration in seconds', false),
+('security.password_min_length', '8', 'security', 'Minimum password length', false),
+('security.require_strong_password', 'true', 'security', 'Require strong passwords', false),
+
+-- Notification settings
+('notifications.order_confirmation', 'true', 'notifications', 'Send order confirmation emails', false),
+('notifications.shipment_updates', 'true', 'notifications', 'Send shipment update emails', false),
+('notifications.payment_confirmation', 'true', 'notifications', 'Send payment confirmation emails', false),
+('notifications.marketing', 'true', 'notifications', 'Send marketing emails', false),
+
+-- Review settings
+('reviews.auto_approve', 'true', 'reviews', 'Auto-approve reviews', false),
+('reviews.require_verification', 'true', 'reviews', 'Require purchase verification', false),
+('reviews.min_rating', '1', 'reviews', 'Minimum rating value', false),
+('reviews.max_images', '3', 'reviews', 'Maximum images per review', false),
+
+-- Inventory settings
+('inventory.low_stock_threshold', '10', 'inventory', 'Low stock threshold', false),
+('inventory.backorder_allowed', 'false', 'inventory', 'Allow backorders', false),
+('inventory.stock_management', 'true', 'inventory', 'Enable stock management', false),
+
+-- Returns & Refunds
+('returns.enabled', 'true', 'returns', 'Enable returns', true),
+('returns.period_days', '30', 'returns', 'Return period in days', true),
+('returns.condition', '["unused", "original_packaging", "with_receipt"]', 'returns', 'Return conditions', true),
+('refunds.process_days', '14', 'refunds', 'Refund processing period', true),
+
+-- Analytics
+('analytics.enabled', 'true', 'analytics', 'Enable analytics tracking', false),
+('analytics.retention_days', '365', 'analytics', 'Analytics data retention period', false),
+
+-- API settings
+('api.rate_limit', '100', 'api', 'API rate limit per minute', false),
+('api.cors_origins', '["https://xarastore.com", "https://www.xarastore.com"]', 'api', 'Allowed CORS origins', false)
+ON CONFLICT (key) DO UPDATE SET
+    value = EXCLUDED.value,
+    category = EXCLUDED.category,
+    description = EXCLUDED.description,
+    is_public = EXCLUDED.is_public;
+
+-- Insert default email templates
+INSERT INTO email_templates (id, name, subject, body, variables, is_active) VALUES
+-- Order confirmation
+('11111111-1111-1111-1111-111111111111', 'order_confirmation', 'Order Confirmation - {{order_number}}',
+'<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Confirmation</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }
+        .order-details { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+        .button { display: inline-block; background-color: #dc2626; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Thank You for Your Order!</h1>
+    </div>
+    <div class="content">
+        <p>Hello {{customer_name}},</p>
+        <p>Your order has been confirmed and is being processed. Here are your order details:</p>
+        
+        <div class="order-details">
+            <h3>Order #{{order_number}}</h3>
+            <p><strong>Order Date:</strong> {{order_date}}</p>
+            <p><strong>Total Amount:</strong> {{order_total}}</p>
+            <p><strong>Payment Method:</strong> {{payment_method}}</p>
+            <p><strong>Shipping Address:</strong><br>{{shipping_address}}</p>
+        </div>
+        
+        <h3>Order Items:</h3>
+        {{order_items}}
+        
+        <p>You can track your order status anytime from your account.</p>
+        
+        <a href="{{tracking_link}}" class="button">Track Your Order</a>
+        
+        <p>If you have any questions, please contact our support team at {{support_email}}.</p>
+        
+        <p>Thank you for shopping with Xarastore!</p>
+    </div>
+    <div class="footer">
+        <p>Xarastore - it''s a deal</p>
+        <p>{{store_address}}</p>
+        <p>© {{current_year}} Xarastore. All rights reserved.</p>
+    </div>
+</body>
+</html>',
+'["customer_name", "order_number", "order_date", "order_total", "payment_method", "shipping_address", "order_items", "tracking_link", "support_email", "store_address", "current_year"]',
+true),
+
+-- Shipping confirmation
+('22222222-2222-2222-2222-222222222222', 'shipping_confirmation', 'Your Order Has Shipped! - {{order_number}}',
+'<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Shipped</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }
+        .tracking-info { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+        .button { display: inline-block; background-color: #dc2626; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Your Order is on the Way!</h1>
+    </div>
+    <div class="content">
+        <p>Hello {{customer_name}},</p>
+        <p>Great news! Your order has been shipped and is on its way to you.</p>
+        
+        <div class="tracking-info">
+            <h3>Tracking Information</h3>
+            <p><strong>Order Number:</strong> {{order_number}}</p>
+            <p><strong>Tracking Number:</strong> {{tracking_number}}</p>
+            <p><strong>Carrier:</strong> {{carrier}}</p>
+            <p><strong>Estimated Delivery:</strong> {{estimated_delivery}}</p>
+        </div>
+        
+        <a href="{{tracking_link}}" class="button">Track Your Package</a>
+        
+        <p>You can track your shipment using the tracking number above on the carrier''s website.</p>
+        
+        <p>If you have any questions about your delivery, please contact our support team.</p>
+        
+        <p>Thank you for shopping with Xarastore!</p>
+    </div>
+    <div class="footer">
+        <p>Xarastore - it''s a deal</p>
+        <p>{{store_address}}</p>
+        <p>© {{current_year}} Xarastore. All rights reserved.</p>
+    </div>
+</body>
+</html>',
+'["customer_name", "order_number", "tracking_number", "carrier", "estimated_delivery", "tracking_link", "store_address", "current_year"]',
+true),
+
+-- Password reset
+('33333333-3333-3333-3333-333333333333', 'password_reset', 'Reset Your Password',
+'<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Password</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+        .button { display: inline-block; background-color: #dc2626; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+        .note { background: #fff3cd; border: 1px solid #ffecb5; padding: 10px; border-radius: 5px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Password Reset Request</h1>
+    </div>
+    <div class="content">
+        <p>Hello,</p>
+        <p>We received a request to reset your password for your Xarastore account.</p>
+        
+        <a href="{{reset_link}}" class="button">Reset Password</a>
+        
+        <div class="note">
+            <p><strong>Note:</strong> This password reset link will expire in 1 hour.</p>
+            <p>If you did not request a password reset, please ignore this email or contact support if you have concerns.</p>
+        </div>
+        
+        <p>For security reasons, we recommend that you:</p>
+        <ul>
+            <li>Use a strong password that you don''t use elsewhere</li>
+            <li>Enable two-factor authentication if available</li>
+            <li>Regularly update your password</li>
+        </ul>
+        
+        <p>If you need further assistance, please contact our support team at {{support_email}}.</p>
+    </div>
+    <div class="footer">
+        <p>Xarastore - it''s a deal</p>
+        <p>{{store_address}}</p>
+        <p>© {{current_year}} Xarastore. All rights reserved.</p>
+    </div>
+</body>
+</html>',
+'["reset_link", "support_email", "store_address", "current_year"]',
+true),
+
+-- Welcome email
+('44444444-4444-4444-4444-444444444444', 'welcome_email', 'Welcome to Xarastore!',
+'<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Xarastore</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+        .button { display: inline-block; background-color: #dc2626; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+        .benefits { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Welcome to Xarastore!</h1>
+    </div>
+    <div class="content">
+        <p>Hello {{customer_name}},</p>
+        <p>Welcome to Xarastore - where it''s always a deal! We''re excited to have you join our community of smart shoppers.</p>
+        
+        <div class="benefits">
+            <h3>Get Started with These Benefits:</h3>
+            <ul>
+                <li><strong>Exclusive Deals:</strong> Access members-only discounts and flash sales</li>
+                <li><strong>Fast Delivery:</strong> Enjoy quick shipping across Kenya</li>
+                <li><strong>Easy Returns:</strong> 30-day hassle-free return policy</li>
+                <li><strong>Secure Payments:</strong> Multiple safe payment options including M-Pesa</li>
+                <li><strong>Wishlist:</strong> Save items for later and get price drop alerts</li>
+            </ul>
+        </div>
+        
+        <a href="{{store_link}}" class="button">Start Shopping Now</a>
+        
+        <p>To get the most out of your account:</p>
+        <ol>
+            <li>Complete your profile information</li>
+            <li>Add your delivery addresses</li>
+            <li>Enable notifications for deals</li>
+            <li>Follow us on social media for updates</li>
+        </ol>
+        
+        <p>Need help? Our support team is available 24/7 at {{support_email}} or call us at {{support_phone}}.</p>
+        
+        <p>Happy shopping!</p>
+        <p>The Xarastore Team</p>
+    </div>
+    <div class="footer">
+        <p>Xarastore - it''s a deal</p>
+        <p>{{store_address}}</p>
+        <p>© {{current_year}} Xarastore. All rights reserved.</p>
+    </div>
+</body>
+</html>',
+'["customer_name", "store_link", "support_email", "support_phone", "store_address", "current_year"]',
+true),
+
+-- Abandoned cart reminder
+('55555555-5555-5555-5555-555555555555', 'abandoned_cart', 'Complete Your Purchase - Items Waiting!',
+'<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete Your Purchase</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }
+        .cart-items { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+        .button { display: inline-block; background-color: #dc2626; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+        .offer { background: #d4edda; border: 1px solid #c3e6cb; padding: 10px; border-radius: 5px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Don''t Miss Out!</h1>
+    </div>
+    <div class="content">
+        <p>Hello {{customer_name}},</p>
+        <p>We noticed you left some items in your cart. They''re waiting for you!</p>
+        
+        <div class="cart-items">
+            <h3>Your Cart Items:</h3>
+            {{cart_items}}
+            <p><strong>Cart Total:</strong> {{cart_total}}</p>
+        </div>
+        
+        <div class="offer">
+            <p><strong>Special Offer:</strong> Complete your purchase within 24 hours and get free shipping!</p>
+        </div>
+        
+        <a href="{{cart_link}}" class="button">Complete Your Purchase</a>
+        
+        <p>Why shop with Xarastore?</p>
+        <ul>
+            <li>✓ Secure checkout with multiple payment options</li>
+            <li>✓ Fast delivery across Kenya</li>
+            <li>✓ Easy returns within 30 days</li>
+            <li>✓ 24/7 customer support</li>
+        </ul>
+        
+        <p>If you need any help with your purchase, reply to this email or call us at {{support_phone}}.</p>
+        
+        <p>Happy shopping!</p>
+    </div>
+    <div class="footer">
+        <p>Xarastore - it''s a deal</p>
+        <p>{{store_address}}</p>
+        <p>© {{current_year}} Xarastore. All rights reserved.</p>
+    </div>
+</body>
+</html>',
+'["customer_name", "cart_items", "cart_total", "cart_link", "support_phone", "store_address", "current_year"]',
+true)
+ON CONFLICT (name) DO UPDATE SET
+    subject = EXCLUDED.subject,
+    body = EXCLUDED.body,
+    variables = EXCLUDED.variables,
+    is_active = EXCLUDED.is_active;
+
+-- Create default admin user (password would be set via separate process)
+-- Note: In production, admin users would be created via the admin interface
+-- This is just a placeholder for development
+DO $$ 
+BEGIN
+    -- Create admin user in auth.users if not exists (this requires admin intervention)
+    -- The actual user creation should happen through Supabase Auth UI or API
+    INSERT INTO users (id, email, full_name, email_verified, is_active, preferences)
+    VALUES (
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        'admin@xarastore.com',
+        'Xarastore Admin',
+        true,
+        true,
+        '{"role": "admin", "permissions": ["all"]}'
+    )
+    ON CONFLICT (email) DO NOTHING;
+END $$;
+
+-- Update product counts in categories based on sample data
+-- Note: In production, these would be updated via triggers when products are added
+UPDATE categories SET product_count = CASE slug
+    WHEN 'electronics' THEN 1250
+    WHEN 'smartphones' THEN 350
+    WHEN 'laptops' THEN 280
+    WHEN 'audio' THEN 420
+    WHEN 'fashion' THEN 1560
+    WHEN 'mens-fashion' THEN 720
+    WHEN 'womens-fashion' THEN 840
+    WHEN 'shoes' THEN 450
+    WHEN 'home-living' THEN 980
+    WHEN 'kitchen' THEN 520
+    WHEN 'furniture' THEN 460
+    WHEN 'beauty-health' THEN 630
+    WHEN 'skincare' THEN 290
+    WHEN 'makeup' THEN 340
+    WHEN 'sports-outdoors' THEN 380
+    WHEN 'fitness' THEN 210
+    WHEN 'outdoor' THEN 170
+    WHEN 'automotive' THEN 290
+    WHEN 'car-accessories' THEN 290
+    WHEN 'groceries' THEN 1120
+    WHEN 'beverages' THEN 430
+    WHEN 'books-stationery' THEN 310
+    WHEN 'toys-games' THEN 240
+    ELSE 0
+END;
+
+-- Update brand product counts
+UPDATE brands SET product_count = CASE slug
+    WHEN 'apple' THEN 85
+    WHEN 'samsung' THEN 120
+    WHEN 'sony' THEN 75
+    WHEN 'hp' THEN 45
+    WHEN 'dell' THEN 60
+    WHEN 'nike' THEN 180
+    WHEN 'adidas' THEN 150
+    WHEN 'zara' THEN 220
+    WHEN 'hugo-boss' THEN 95
+    WHEN 'ikea' THEN 310
+    WHEN 'kitchenaid' THEN 65
+    WHEN 'loreal' THEN 140
+    WHEN 'estee-lauder' THEN 90
+    WHEN 'kingsway' THEN 75
+    WHEN 'nakumatt' THEN 420
+    WHEN 'safaricom' THEN 35
+    WHEN 'puma' THEN 110
+    WHEN 'under-armour' THEN 85
+    WHEN 'bosch' THEN 70
+    WHEN 'michelin' THEN 45
+    ELSE 0
+END;
+
+-- Create initial collections
+INSERT INTO collections (id, slug, name, description, image, banner_image, is_active, sort_order, products) VALUES
+-- Flash sales collection
+('11111111-1111-1111-1111-111111111111', 'flash-sales', 'Flash Sales', 'Limited time offers with huge discounts', 'https://cdn.xarastore.com/collections/flash-sales.jpg', 'https://cdn.xarastore.com/banners/flash-sales.jpg', true, 1, '[]'),
+
+-- New arrivals
+('22222222-2222-2222-2222-222222222222', 'new-arrivals', 'New Arrivals', 'Latest products just added to store', 'https://cdn.xarastore.com/collections/new-arrivals.jpg', 'https://cdn.xarastore.com/banners/new-arrivals.jpg', true, 2, '[]'),
+
+-- Best sellers
+('33333333-3333-3333-3333-333333333333', 'best-sellers', 'Best Sellers', 'Our most popular products', 'https://cdn.xarastore.com/collections/best-sellers.jpg', 'https://cdn.xarastore.com/banners/best-sellers.jpg', true, 3, '[]'),
+
+-- Trending now
+('44444444-4444-4444-4444-444444444444', 'trending-now', 'Trending Now', 'Products everyone is talking about', 'https://cdn.xarastore.com/collections/trending-now.jpg', 'https://cdn.xarastore.com/banners/trending-now.jpg', true, 4, '[]'),
+
+-- Under 5000 KES
+('55555555-5555-5555-5555-555555555555', 'under-5000', 'Under 5000 KES', 'Great products at affordable prices', 'https://cdn.xarastore.com/collections/under-5000.jpg', 'https://cdn.xarastore.com/banners/under-5000.jpg', true, 5, '[]'),
+
+-- Tech essentials
+('66666666-6666-6666-6666-666666666666', 'tech-essentials', 'Tech Essentials', 'Must-have gadgets and accessories', 'https://cdn.xarastore.com/collections/tech-essentials.jpg', 'https://cdn.xarastore.com/banners/tech-essentials.jpg', true, 6, '[]'),
+
+-- Home office
+('77777777-7777-7777-7777-777777777777', 'home-office', 'Home Office', 'Products for your home workspace', 'https://cdn.xarastore.com/collections/home-office.jpg', 'https://cdn.xarastore.com/banners/home-office.jpg', true, 7, '[]'),
+
+-- Fitness gear
+('88888888-8888-8888-8888-888888888888', 'fitness-gear', 'Fitness Gear', 'Equipment for your home workouts', 'https://cdn.xarastore.com/collections/fitness-gear.jpg', 'https://cdn.xarastore.com/banners/fitness-gear.jpg', true, 8, '[]'),
+
+-- Gift ideas
+('99999999-9999-9999-9999-999999999999', 'gift-ideas', 'Gift Ideas', 'Perfect gifts for any occasion', 'https://cdn.xarastore.com/collections/gift-ideas.jpg', 'https://cdn.xarastore.com/banners/gift-ideas.jpg', true, 9, '[]'),
+
+-- Kenyan made
+('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'kenyan-made', 'Kenyan Made', 'Support local businesses and products', 'https://cdn.xarastore.com/collections/kenyan-made.jpg', 'https://cdn.xarastore.com/banners/kenyan-made.jpg', true, 10, '[]')
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    image = EXCLUDED.image,
+    banner_image = EXCLUDED.banner_image,
+    is_active = EXCLUDED.is_active,
+    sort_order = EXCLUDED.sort_order;

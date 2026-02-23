@@ -1,0 +1,109 @@
+# ============================================================================
+# XARASTORE TESTING DOCKERFILE
+# ============================================================================
+# For running tests in CI/CD pipeline
+
+FROM node:18-alpine AS test-base
+
+# Install system dependencies for testing
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git \
+    curl \
+    bash \
+    chromium \
+    chromium-chromedriver \
+    postgresql-client \
+    redis \
+    tzdata
+
+# Set timezone
+ENV TZ=Africa/Nairobi
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Set Puppeteer environment variables
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY yarn.lock ./
+
+# Install dependencies (including test dependencies)
+RUN npm ci --include=dev
+
+# Copy application code
+COPY . .
+
+# Set permissions
+RUN chown -R node:node /app
+USER node
+
+# Test stage
+FROM test-base AS test-runner
+
+# Create test reports directory
+RUN mkdir -p /app/test-reports
+
+# Run tests
+CMD ["npm", "test", "--", "--ci", "--reporters=default", "--reporters=jest-junit"]
+
+# Integration test stage
+FROM test-base AS integration-test
+
+# Install additional dependencies for integration tests
+RUN npm install --no-save \
+    supertest \
+    jest-mongodb \
+    @shelf/jest-mongodb
+
+# Copy test configuration
+COPY jest.config.integration.js ./jest.config.js
+
+# Run integration tests
+CMD ["npm", "run", "test:integration", "--", "--ci", "--reporters=default", "--reporters=jest-junit"]
+
+# E2E test stage
+FROM test-base AS e2e-test
+
+# Install Playwright browsers
+RUN npx playwright install --with-deps chromium
+
+# Copy Playwright configuration
+COPY playwright.config.ts ./
+
+# Run E2E tests
+CMD ["npm", "run", "test:e2e", "--", "--reporter=junit"]
+
+# Performance test stage
+FROM test-base AS performance-test
+
+# Install Lighthouse CI
+RUN npm install -g @lhci/cli
+
+# Copy Lighthouse configuration
+COPY .lighthouserc.js ./
+
+# Run performance tests
+CMD ["lhci", "autorun"]
+
+# Security test stage
+FROM test-base AS security-test
+
+# Install security scanning tools
+RUN npm install -g \
+    snyk \
+    auditjs \
+    npm-audit-html \
+    owasp-dependency-check
+
+# Copy security configuration
+COPY .snyk ./
+
+# Run security tests
+CMD ["sh", "-c", "npm audit --audit-level=high && snyk test --severity-threshold=high"]

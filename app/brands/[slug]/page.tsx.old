@@ -1,0 +1,365 @@
+import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
+import { Award, Star, Shield, Truck, Check } from 'lucide-react';
+import { ProductGrid } from '@/components/product/ProductGrid';
+import { Button } from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { searchProducts, getBrands } from '@/lib/supabase/queries/products';
+
+interface BrandPageProps {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export async function generateMetadata({ params }: BrandPageProps) {
+  const { slug } = await params;
+  const brands = await getBrands();
+  const brand = brands.find(b => b.slug === slug);
+
+  if (!brand) {
+    return {
+      title: 'Brand Not Found | Xarastore',
+      description: 'Brand not found',
+    };
+  }
+
+  return {
+    title: `${brand.name} | Official Store | Xarastore`,
+    description: `Shop genuine ${brand.name} products with warranty. Best prices on ${brand.name} electronics, appliances, and more.`,
+  };
+}
+
+export default async function BrandPage({ params, searchParams }: BrandPageProps) {
+  const { slug } = await params;
+  const paramsObj = await searchParams;
+  
+  const brands = await getBrands();
+  const brand = brands.find(b => b.slug === slug);
+
+  if (!brand) {
+    notFound();
+  }
+
+  const page = typeof paramsObj.page === 'string' ? parseInt(paramsObj.page) : 1;
+  const sort = typeof paramsObj.sort === 'string' ? paramsObj.sort : 'popular';
+  
+  const { products, total } = await searchProducts(
+    '',
+    { brandIds: [brand.id], sortBy: sort },
+    page,
+    24
+  );
+
+  const brandFeatures = [
+    { icon: Shield, title: 'Official Store', description: '100% genuine products' },
+    { icon: Award, title: 'Warranty', description: 'Manufacturer warranty included' },
+    { icon: Truck, title: 'Fast Delivery', description: 'Across Kenya' },
+    { icon: Star, title: 'Top Rated', description: 'Customer satisfaction' },
+  ];
+
+  const topProducts = products.slice(0, 4);
+  const newArrivals = products.filter(p => {
+    const createdDate = new Date(p.createdAt);
+    const daysAgo = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
+    return daysAgo < 30;
+  }).slice(0, 4);
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Brand Hero */}
+      <div className="bg-gradient-to-r from-red-600 to-red-800 text-white py-12">
+        <div className="container-responsive">
+          <nav className="text-sm mb-4">
+            <ol className="flex items-center space-x-2">
+              <li>
+                <a href="/" className="opacity-80 hover:opacity-100 transition-opacity">
+                  Home
+                </a>
+              </li>
+              <li>/</li>
+              <li>
+                <a href="/brands" className="opacity-80 hover:opacity-100 transition-opacity">
+                  Brands
+                </a>
+              </li>
+              <li>/</li>
+              <li className="font-medium">{brand.name}</li>
+            </ol>
+          </nav>
+          
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
+            <div className="flex-1">
+              <div className="flex items-center space-x-4 mb-6">
+                {brand.logo && (
+                  <div className="w-20 h-20 bg-white rounded-xl p-4">
+                    <img
+                      src={brand.logo}
+                      alt={brand.name}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                )}
+                <div>
+                  <h1 className="text-4xl md:text-5xl font-bold mb-2">{brand.name}</h1>
+                  <p className="text-xl opacity-90">
+                    Official Store on Xarastore
+                  </p>
+                </div>
+              </div>
+              
+              <p className="text-lg opacity-90 max-w-3xl">
+                {brand.description || `Discover genuine ${brand.name} products with warranty. Shop the latest collections at the best prices.`}
+              </p>
+            </div>
+            
+            <div className="flex items-center space-x-6">
+              <div className="text-center">
+                <div className="text-3xl font-bold">{brand.productCount.toLocaleString()}+</div>
+                <div className="text-sm opacity-80">Products</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold">4.5</div>
+                <div className="text-sm opacity-80">Avg. Rating</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container-responsive py-8">
+        {/* Brand Features */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
+          {brandFeatures.map((feature, index) => {
+            const Icon = feature.icon;
+            return (
+              <div key={index} className="bg-white rounded-xl border border-gray-200 p-6 text-center">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Icon className="w-6 h-6 text-red-600" />
+                </div>
+                <h3 className="font-semibold mb-2">{feature.title}</h3>
+                <p className="text-sm text-gray-600">{feature.description}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Top Products */}
+        {topProducts.length > 0 && (
+          <div className="mb-12">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-2xl md:text-3xl font-bold">🔥 Best Sellers</h2>
+                <p className="text-gray-600 mt-2">Most popular {brand.name} products</p>
+              </div>
+              <Button variant="link" href={`/brands/${slug}?sort=popular`}>
+                View All
+              </Button>
+            </div>
+            <Suspense fallback={<ProductGridSkeleton count={4} />}>
+              <ProductGrid products={topProducts} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* All Products */}
+        <div className="mb-12">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold">All {brand.name} Products</h2>
+              <p className="text-gray-600 mt-2">
+                {total.toLocaleString()} products available
+              </p>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <select
+                defaultValue={sort}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-red-600 focus:ring-2 focus:ring-red-600/20 outline-none"
+              >
+                <option value="popular">Most Popular</option>
+                <option value="newest">Newest Arrivals</option>
+                <option value="price-low">Price: Low to High</option>
+                <option value="price-high">Price: High to Low</option>
+                <option value="rating">Top Rated</option>
+              </select>
+            </div>
+          </div>
+
+          <Suspense fallback={<ProductGridSkeleton />}>
+            <ProductGrid products={products} />
+          </Suspense>
+
+          {/* Pagination */}
+          {total > 24 && (
+            <div className="mt-12 flex justify-center">
+              <nav className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  href={`/brands/${slug}?page=${page - 1}`}
+                >
+                  Previous
+                </Button>
+                
+                {Array.from({ length: Math.min(5, Math.ceil(total / 24)) }).map((_, i) => {
+                  const pageNum = i + 1;
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={page === pageNum ? 'primary' : 'outline'}
+                      size="sm"
+                      href={`/brands/${slug}?page=${pageNum}`}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+                
+                {Math.ceil(total / 24) > 5 && (
+                  <>
+                    <span className="px-2">...</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      href={`/brands/${slug}?page=${Math.ceil(total / 24)}`}
+                    >
+                      {Math.ceil(total / 24)}
+                    </Button>
+                  </>
+                )}
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page * 24 >= total}
+                  href={`/brands/${slug}?page=${page + 1}`}
+                >
+                  Next
+                </Button>
+              </nav>
+            </div>
+          )}
+        </div>
+
+        {/* New Arrivals */}
+        {newArrivals.length > 0 && (
+          <div className="mb-12">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-2xl md:text-3xl font-bold">🆕 New Arrivals</h2>
+                <p className="text-gray-600 mt-2">Latest {brand.name} products</p>
+              </div>
+              <Button variant="link" href={`/brands/${slug}?sort=newest`}>
+                View All New
+              </Button>
+            </div>
+            <Suspense fallback={<ProductGridSkeleton count={4} />}>
+              <ProductGrid products={newArrivals} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* Brand Benefits */}
+        <div className="bg-gradient-to-r from-red-600 to-red-800 text-white rounded-2xl p-8">
+          <h2 className="text-3xl font-bold mb-6">Why Shop {brand.name} on Xarastore?</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="flex items-start space-x-4">
+              <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Check className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg mb-2">100% Authentic</h3>
+                <p className="opacity-90">All products are genuine with manufacturer warranty</p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-4">
+              <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Shield className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg mb-2">Warranty Support</h3>
+                <p className="opacity-90">Easy warranty claims and customer support</p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-4">
+              <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Truck className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg mb-2">Fast Delivery</h3>
+                <p className="opacity-90">Quick delivery across major cities in Kenya</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Brand Description */}
+        <div className="mt-12 bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+          <h2 className="text-2xl font-bold mb-6">About {brand.name}</h2>
+          <div className="prose max-w-none">
+            <p className="text-gray-700 mb-4">
+              {brand.description || `${brand.name} is a leading brand known for quality and innovation. 
+              As an official partner on Xarastore, we bring you genuine products with full warranty 
+              coverage and excellent after-sales support.`}
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+              <div>
+                <h3 className="font-semibold text-lg mb-4">Brand Highlights</h3>
+                <ul className="space-y-3">
+                  <li className="flex items-center">
+                    <Check className="w-5 h-5 text-green-600 mr-3" />
+                    <span>Official brand partnership</span>
+                  </li>
+                  <li className="flex items-center">
+                    <Check className="w-5 h-5 text-green-600 mr-3" />
+                    <span>Manufacturer warranty included</span>
+                  </li>
+                  <li className="flex items-center">
+                    <Check className="w-5 h-5 text-green-600 mr-3" />
+                    <span>Genuine spare parts available</span>
+                  </li>
+                  <li className="flex items-center">
+                    <Check className="w-5 h-5 text-green-600 mr-3" />
+                    <span>Professional installation services</span>
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg mb-4">Customer Support</h3>
+                <ul className="space-y-3">
+                  <li className="flex items-center">
+                    <Check className="w-5 h-5 text-green-600 mr-3" />
+                    <span>Dedicated brand support team</span>
+                  </li>
+                  <li className="flex items-center">
+                    <Check className="w-5 h-5 text-green-600 mr-3" />
+                    <span>Easy warranty registration</span>
+                  </li>
+                  <li className="flex items-center">
+                    <Check className="w-5 h-5 text-green-600 mr-3" />
+                    <span>Quick replacement policy</span>
+                  </li>
+                  <li className="flex items-center">
+                    <Check className="w-5 h-5 text-green-600 mr-3" />
+                    <span>Product training available</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductGridSkeleton({ count = 8 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+      {Array.from({ length: count }).map((_, i) => (
+        <Skeleton key={i} className="h-64 rounded-xl" />
+      ))}
+    </div>
+  );
+}

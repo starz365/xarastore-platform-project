@@ -1,0 +1,136 @@
+{
+  "*.{js,jsx,ts,tsx}": [
+    "eslint --fix --max-warnings=0",
+    "prettier --write"
+  ],
+  "*.{json,md,yml,yaml}": [
+    "prettier --write"
+  ],
+  "*.{css,scss}": [
+    "stylelint --fix",
+    "prettier --write"
+  ],
+  "*.{html,vue}": [
+    "prettier --write"
+  ],
+  "*.{graphql,gql}": [
+    "prettier --write"
+  ],
+  "*.{sql}": [
+    "sql-formatter -l postgresql"
+  ],
+  "*.{dockerfile,Dockerfile}": [
+    "hadolint"
+  ],
+  "*.{tf,tfvars}": [
+    "terraform fmt"
+  ],
+  "*.{go}": [
+    "gofmt -w"
+  ],
+  "*.{py}": [
+    "black",
+    "isort"
+  ],
+  "*.{rs}": [
+    "rustfmt"
+  ],
+  "*.{java}": [
+    "google-java-format --replace"
+  ],
+  "*.{swift}": [
+    "swiftformat"
+  ],
+  "*.{kt,kts}": [
+    "ktlint -F"
+  ],
+  "*.{php}": [
+    "php-cs-fixer fix"
+  ],
+  "*.{rb}": [
+    "rubocop -a"
+  ],
+  "*.{ex,exs}": [
+    "mix format"
+  ],
+  "*.{clj,cljs,cljc,edn}": [
+    "cljstyle fix"
+  ],
+  "*.{hs}": [
+    "hindent"
+  ],
+  "*.{scala}": [
+    "scalafmt"
+  ],
+  "*.{ml,mli}": [
+    "ocamlformat"
+  ],
+  "*.{lua}": [
+    "stylua"
+  ],
+  "*.{dart}": [
+    "dart format"
+  ],
+  "*.{ps1}": [
+    "pwsh -Command \"Get-ChildItem -Recurse -Include *.ps1 | ForEach-Object { & 'Invoke-Formatter' -ScriptDefinition (Get-Content $_ -Raw) | Set-Content $_ }\""
+  ],
+  "*.{sh,bash}": [
+    "shfmt -w -i 2",
+    "shellcheck"
+  ],
+  "*.{psd,ai,sketch}": [
+    "echo 'Design files updated'"
+  ],
+  "*.{png,jpg,jpeg,gif,svg,ico}": [
+    "imageoptim --image-alpha --quit"
+  ],
+  "*.{mp4,webm,mp3,wav}": [
+    "echo 'Media files updated'"
+  ],
+  "*.{zip,tar,gz,rar,7z}": [
+    "echo 'Archive files updated'"
+  ],
+  "concurrent": false,
+  "chunkSize": 10,
+  "globOptions": {
+    "matchBase": true,
+    "dot": true
+  },
+  "ignore": [
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/*.min.js",
+    "**/*.bundle.js",
+    "**/vendor/**",
+    "**/public/**",
+    "**/static/**",
+    "**/generated/**",
+    "**/migrations/**",
+    "**/seeds/**",
+    "**/fixtures/**"
+  ],
+  "linters": {
+    "*.{js,jsx,ts,tsx}": {
+      "eslint": {
+        "args": [
+          "--fix",
+          "--max-warnings=0",
+          "--config",
+          ".eslintrc.js"
+        ]
+      },
+      "prettier": {
+        "args": [
+          "--write",
+          "--config",
+          ".prettierrc"
+        ]
+      }
+    }
+  },
+  "verbose": true,
+  "debug": false
+}

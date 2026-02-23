@@ -1,0 +1,43 @@
+export default function Loading() {
+  return (
+    <div
+      aria-busy="true"
+      aria-live="polite"
+      role="status"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-white"
+    >
+      <div className="w-full max-w-sm px-6 text-center">
+        {/* Spinner */}
+        <div className="mx-auto mb-6 h-10 w-10 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+
+        {/* Primary message */}
+        <p className="text-sm font-semibold text-gray-900">
+          Preparing your Gift Card experience
+        </p>
+
+        {/* Secondary message */}
+        <p className="mt-2 text-xs text-gray-500">
+          Loading secure checkout, designs, and payment options…
+        </p>
+
+        {/* Progressive hints (pure CSS, no JS timers) */}
+        <div className="mt-6 space-y-2 text-[11px] text-gray-400">
+          <p className="animate-pulse">
+            • Verifying available gift card designs
+          </p>
+          <p className="animate-pulse delay-150">
+            • Initializing payment methods
+          </p>
+          <p className="animate-pulse delay-300">
+            • Optimizing checkout performance
+          </p>
+        </div>
+
+        {/* Brand reassurance */}
+        <div className="mt-6 text-[10px] text-gray-400">
+          Xarastore · Secure · Fast · Reliable
+        </div>
+      </div>
+    </div>
+  );
+}

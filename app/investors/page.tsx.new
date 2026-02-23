@@ -1,0 +1,22 @@
+import { InvestorHero } from '@/components/investors/InvestorHero';
+import { FinancialHighlights } from '@/components/investors/FinancialHighlights';
+import { InvestorResources } from '@/components/investors/InvestorResources';
+import { ContactInvestorRelations } from '@/components/investors/ContactInvestorRelations';
+
+export const metadata = {
+  title: 'Investor Relations | Xarastore',
+  description: 'Financial information, reports, and investor resources for Xarastore.',
+};
+
+export default function InvestorsPage() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <InvestorHero />
+      <div className="container-responsive py-8 space-y-12">
+        <FinancialHighlights />
+        <InvestorResources />
+        <ContactInvestorRelations />
+      </div>
+    </div>
+  );
+}

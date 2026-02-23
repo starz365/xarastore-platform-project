@@ -1,0 +1,51 @@
+'use client';
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { useState, useEffect } from 'react';
+import { ThemeProvider } from 'next-themes';
+
+
+import { CurrencyProvider } from '@/components/settings/CurrencyProvider';
+import { MaintenanceBanner } from '@/components/settings/MaintenanceBanner';
+import { emailService } from '@/services/email/EmailService';
+
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60 * 1000, // 1 minute
+        gcTime: 5 * 60 * 1000, // 5 minutes
+        retry: 1,
+        refetchOnWindowFocus: false,
+      },
+    },
+  }));
+
+  // Initialize offline database
+  useEffect(() => {
+
+    // Initialize services
+    emailService.initialize();
+
+    // Initialize offline database
+    if (typeof window !== 'undefined') {
+      import('@/lib/utils/offline').then(({ initOfflineDB }) => {
+        initOfflineDB();
+      });
+    }
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <CurrencyProvider>
+          <MaintenanceBanner />
+          {children}
+        </CurrencyProvider>
+      </ThemeProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  );
+}

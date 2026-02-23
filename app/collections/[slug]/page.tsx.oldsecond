@@ -1,0 +1,293 @@
+import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { ArrowLeft, Sparkles, Zap, Clock, TrendingUp } from 'lucide-react';
+import { getCollectionBySlug, getCollectionProducts } from '@/lib/supabase/queries/collections';
+import { ProductGrid } from '@/components/product/ProductGrid';
+import { ProductGridSkeleton } from '@/components/product/ProductGridSkeleton';
+import { EmptyState } from '@/components/product/EmptyState';
+import { Button } from '@/components/ui/Button';
+
+interface CollectionPageProps {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export async function generateMetadata({ params }: CollectionPageProps) {
+  const { slug } = await params;
+  const collection = await getCollectionBySlug(slug);
+
+  if (!collection) {
+    return {
+      title: 'Collection Not Found | Xarastore',
+      description: 'Collection not found',
+    };
+  }
+
+  return {
+    title: `${collection.name} - Curated Collection | Xarastore`,
+    description: collection.description,
+    openGraph: {
+      images: [collection.image],
+    },
+  };
+}
+
+export default async function CollectionPage({ params, searchParams }: CollectionPageProps) {
+  const { slug } = await params;
+  const collection = await getCollectionBySlug(slug);
+  const searchParamsObj = await searchParams;
+  const page = parseInt(searchParamsObj.page as string) || 1;
+
+  if (!collection) {
+    notFound();
+  }
+
+  const { products, total } = await getCollectionProducts(collection.id, page, 24);
+  const totalPages = Math.ceil(total / 24);
+
+  const stats = [
+    { label: 'Products', value: collection.productCount, icon: Sparkles },
+    { label: 'Avg Price', value: 'KES 2,499', icon: TrendingUp },
+    { label: 'Avg Rating', value: '4.7/5', icon: Zap },
+    { label: 'New This Week', value: '12', icon: Clock },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
+      {/* Collection Hero */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-transparent z-10" />
+        <div className="relative h-64 md:h-96 overflow-hidden">
+          <Image
+            src={collection.image}
+            alt={collection.name}
+            fill
+            className="object-cover"
+            sizes="100vw"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10" />
+          <div className="relative z-20 container-responsive h-full flex flex-col justify-end pb-8">
+            <div className="max-w-3xl">
+              <Link
+                href="/collections"
+                className="inline-flex items-center space-x-2 text-white/80 hover:text-white mb-4 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Collections</span>
+              </Link>
+              <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+                {collection.name}
+              </h1>
+              <p className="text-xl text-white/90 mb-6">
+                {collection.description}
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <Button variant="primary" size="lg">
+                  Shop Collection
+                </Button>
+                <Button variant="outline" size="lg" className="text-white border-white">
+                  Save Collection
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Collection Stats */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="container-responsive py-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {stats.map((stat) => {
+              const Icon = stat.icon;
+              return (
+                <div key={stat.label} className="text-center">
+                  <div className="flex items-center justify-center space-x-2 mb-2">
+                    <Icon className="w-5 h-5 text-red-600" />
+                    <span className="text-2xl font-bold">{stat.value}</span>
+                  </div>
+                  <div className="text-sm text-gray-600">{stat.label}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Collection Description */}
+      <div className="bg-gray-50 border-y border-gray-200">
+        <div className="container-responsive py-8">
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="text-2xl font-bold mb-4">About This Collection</h2>
+            <p className="text-gray-700 mb-6">
+              This carefully curated selection brings together the best products for your needs.
+              Each item has been handpicked by our experts to ensure quality, style, and value.
+            </p>
+            <div className="flex flex-wrap justify-center gap-6">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full" />
+                <span className="text-sm">Expertly Curated</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full" />
+                <span className="text-sm">Quality Guaranteed</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full" />
+                <span className="text-sm">Best Value</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full" />
+                <span className="text-sm">Trend Focused</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Products Section */}
+      <div className="container-responsive py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold">
+              Collection Products
+            </h2>
+            <p className="text-gray-600 mt-2">
+              {total} handpicked products
+            </p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <select className="border border-gray-300 rounded-lg px-4 py-2 text-sm">
+              <option>Sort by: Featured</option>
+              <option>Price: Low to High</option>
+              <option>Price: High to Low</option>
+              <option>Newest First</option>
+              <option>Best Rating</option>
+            </select>
+          </div>
+        </div>
+
+        {products.length > 0 ? (
+          <>
+            <Suspense fallback={<ProductGridSkeleton count={12} />}>
+              <ProductGrid products={products} />
+            </Suspense>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center space-x-2 mt-12">
+                <Button
+                  variant="secondary"
+                  disabled={page <= 1}
+                  href={`/collections/${slug}?page=${page - 1}`}
+                >
+                  Previous
+                </Button>
+                <div className="flex items-center space-x-2">
+                  {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
+                    const pageNum = i + 1;
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={page === pageNum ? 'primary' : 'secondary'}
+                        size="sm"
+                        href={`/collections/${slug}?page=${pageNum}`}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                  {totalPages > 5 && (
+                    <>
+                      <span className="text-gray-500">...</span>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        href={`/collections/${slug}?page=${totalPages}`}
+                      >
+                        {totalPages}
+                      </Button>
+                    </>
+                  )}
+                </div>
+                <Button
+                  variant="secondary"
+                  disabled={page >= totalPages}
+                  href={`/collections/${slug}?page=${page + 1}`}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <EmptyState
+            title="No Products in Collection"
+            description="This collection is currently empty. Check back soon for new additions."
+            icon="search"
+            action={{
+              label: 'Browse Other Collections',
+              href: '/collections',
+            }}
+          />
+        )}
+      </div>
+
+      {/* Collection CTA */}
+      <div className="bg-gradient-to-r from-red-600 to-red-800 text-white">
+        <div className="container-responsive py-12">
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="text-3xl font-bold mb-4">
+              Love This Collection?
+            </h2>
+            <p className="text-xl opacity-90 mb-8">
+              Save it to your favorites and get notified when new products are added.
+            </p>
+            <div className="flex flex-wrap justify-center gap-4">
+              <Button variant="secondary" size="lg">
+                <Sparkles className="w-5 h-5 mr-2" />
+                Save Collection
+              </Button>
+              <Button variant="outline" size="lg" className="text-white border-white">
+                Share with Friends
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Related Collections */}
+      <div className="bg-white py-12">
+        <div className="container-responsive">
+          <h2 className="text-2xl font-bold mb-8">You Might Also Like</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <Link
+                key={i}
+                href={`/collections/similar-collection-${i}`}
+                className="group block"
+              >
+                <div className="relative overflow-hidden rounded-xl aspect-[3/2] mb-4">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                    <h3 className="font-bold text-lg">Similar Collection {i}</h3>
+                    <p className="text-white/80 text-sm">Discover related products</p>
+                  </div>
+                </div>
+                <div className="text-center">
+                  <h4 className="font-semibold group-hover:text-red-600 transition-colors">
+                    Similar Collection {i}
+                  </h4>
+                  <p className="text-sm text-gray-500">15+ products</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

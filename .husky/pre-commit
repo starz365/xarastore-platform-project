@@ -1,0 +1,33 @@
+xarastore/.husky/pre-commit
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔍 Running pre-commit checks..."
+
+# Run lint-staged
+npx lint-staged
+
+# Check for debugger statements
+FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|jsx|ts|tsx)$')
+if [ -n "$FILES" ]; then
+  if grep -q "debugger" $FILES; then
+    echo "❌ Error: debugger statements found in committed files:"
+    grep -l "debugger" $FILES
+    exit 1
+  fi
+fi
+
+# Check for console.log in production code
+if [ -n "$FILES" ]; then
+  # Allow console.log in test files
+  NON_TEST_FILES=$(echo "$FILES" | grep -v -E '\.(test|spec)\.(js|jsx|ts|tsx)$')
+  if [ -n "$NON_TEST_FILES" ]; then
+    if grep -q "console\." $NON_TEST_FILES; then
+      echo "⚠️  Warning: console statements found in non-test files"
+      grep -l "console\." $NON_TEST_FILES
+      # Don't fail, just warn
+    fi
+  fi
+fi
+
+echo "✅ Pre-commit checks passed!"

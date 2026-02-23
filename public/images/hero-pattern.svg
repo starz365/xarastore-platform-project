@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="grid-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#dc2626" stop-opacity="0.08">
+        <animate attributeName="stop-opacity" values="0.08;0.12;0.08" dur="8s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="50%" stop-color="#991b1b" stop-opacity="0.05">
+        <animate attributeName="stop-opacity" values="0.05;0.08;0.05" dur="8s" repeatCount="indefinite" begin="1s"/>
+      </stop>
+      <stop offset="100%" stop-color="#7f1d1d" stop-opacity="0.03">
+        <animate attributeName="stop-opacity" values="0.03;0.06;0.03" dur="8s" repeatCount="indefinite" begin="2s"/>
+      </stop>
+    </linearGradient>
+    
+    <pattern id="main-pattern" x="0" y="0" width="120" height="120" patternUnits="userSpaceOnUse">
+      <circle cx="60" cy="60" r="8" fill="url(#grid-gradient)">
+        <animate attributeName="r" values="8;10;8" dur="4s" repeatCount="indefinite"/>
+      </circle>
+      
+      <circle cx="30" cy="30" r="6" fill="url(#grid-gradient)" opacity="0.7">
+        <animate attributeName="r" values="6;8;6" dur="4s" repeatCount="indefinite" begin="0.5s"/>
+      </circle>
+      
+      <circle cx="90" cy="90" r="6" fill="url(#grid-gradient)" opacity="0.7">
+        <animate attributeName="r" values="6;8;6" dur="4s" repeatCount="indefinite" begin="1s"/>
+      </circle>
+      
+      <circle cx="30" cy="90" r="4" fill="url(#grid-gradient)" opacity="0.5">
+        <animate attributeName="r" values="4;6;4" dur="4s" repeatCount="indefinite" begin="1.5s"/>
+      </circle>
+      
+      <circle cx="90" cy="30" r="4" fill="url(#grid-gradient)" opacity="0.5">
+        <animate attributeName="r" values="4;6;4" dur="4s" repeatCount="indefinite" begin="2s"/>
+      </circle>
+    </pattern>
+    
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <symbol id="deal-badge">
+      <circle cx="15" cy="15" r="12" fill="#dc2626" filter="url(#glow)"/>
+      <text x="15" y="15" text-anchor="middle" dy="0.3em" font-family="system-ui, -apple-system, sans-serif" font-size="8" font-weight="bold" fill="white">%</text>
+    </symbol>
+    
+    <symbol id="kes-symbol">
+      <rect x="0" y="0" width="18" height="18" rx="4" fill="#dc2626" opacity="0.8"/>
+      <text x="9" y="9" text-anchor="middle" dy="0.3em" font-family="system-ui, -apple-system, sans-serif" font-size="8" font-weight="bold" fill="white">KES</text>
+    </symbol>
+    
+    <symbol id="xara-logo">
+      <rect x="0" y="0" width="16" height="16" rx="3" fill="#dc2626"/>
+      <text x="8" y="8" text-anchor="middle" dy="0.3em" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="bold" fill="white">X</text>
+    </symbol>
+  </defs>
+  
+  <rect width="100%" height="100%" fill="#000"/>
+  
+  <rect width="100%" height="100%" fill="url(#main-pattern)" opacity="0.4"/>
+  
+  <!-- Animated abstract elements representing deals -->
+  <g opacity="0.15">
+    <!-- Floating deal badges -->
+    <use xlink:href="#deal-badge" x="200" y="150">
+      <animate attributeName="x" values="200;220;200" dur="15s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="150;130;150" dur="15s" repeatCount="indefinite" begin="0.5s"/>
+    </use>
+    
+    <use xlink:href="#deal-badge" x="1200" y="400">
+      <animate attributeName="x" values="1200;1180;1200" dur="18s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="400;420;400" dur="18s" repeatCount="indefinite" begin="1s"/>
+    </use>
+    
+    <use xlink:href="#deal-badge" x="800" y="650">
+      <animate attributeName="x" values="800;820;800" dur="20s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="650;630;650" dur="20s" repeatCount="indefinite" begin="2s"/>
+    </use>
+    
+    <use xlink:href="#deal-badge" x="400" y="750">
+      <animate attributeName="x" values="400;420;400" dur="16s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="750;770;750" dur="16s" repeatCount="indefinite" begin="3s"/>
+    </use>
+  </g>
+  
+  <!-- Currency symbols floating -->
+  <g opacity="0.1">
+    <use xlink:href="#kes-symbol" x="300" y="250">
+      <animate attributeName="x" values="300;320;300" dur="25s" repeatCount="indefinite"/>
+    </use>
+    
+    <use xlink:href="#kes-symbol" x="1100" y="300">
+      <animate attributeName="x" values="1100;1080;1100" dur="22s" repeatCount="indefinite" begin="1.5s"/>
+    </use>
+    
+    <use xlink:href="#kes-symbol" x="600" y="500">
+      <animate attributeName="y" values="500;480;500" dur="20s" repeatCount="indefinite" begin="2.5s"/>
+    </use>
+  </g>
+  
+  <!-- Xarastore logos floating -->
+  <g opacity="0.08">
+    <use xlink:href="#xara-logo" x="100" y="500">
+      <animate attributeName="y" values="500;520;500" dur="30s" repeatCount="indefinite"/>
+    </use>
+    
+    <use xlink:href="#xara-logo" x="1300" y="200">
+      <animate attributeName="x" values="1300;1320;1300" dur="28s" repeatCount="indefinite" begin="4s"/>
+    </use>
+    
+    <use xlink:href="#xara-logo" x="1000" y="800">
+      <animate attributeName="y" values="800;780;800" dur="32s" repeatCount="indefinite" begin="6s"/>
+    </use>
+  </g>
+  
+  <!-- Geometric lines connecting elements -->
+  <g stroke="#dc2626" stroke-width="0.5" stroke-opacity="0.07" fill="none">
+    <line x1="200" y1="150" x2="1200" y2="400">
+      <animate attributeName="stroke-opacity" values="0.07;0.12;0.07" dur="10s" repeatCount="indefinite"/>
+    </line>
+    
+    <line x1="800" y1="650" x2="400" y2="750">
+      <animate attributeName="stroke-opacity" values="0.07;0.12;0.07" dur="10s" repeatCount="indefinite" begin="2s"/>
+    </line>
+    
+    <line x1="300" y1="250" x2="1100" y2="300">
+      <animate attributeName="stroke-opacity" values="0.07;0.12;0.07" dur="10s" repeatCount="indefinite" begin="1s"/>
+    </line>
+  </g>
+  
+  <!-- Subtle wave at bottom -->
+  <path d="M0,800 C300,750 600,850 900,800 S1200,750 1440,800 L1440,900 L0,900 Z" fill="#dc2626" opacity="0.03">
+    <animate attributeName="d" 
+             values="M0,800 C300,750 600,850 900,800 S1200,750 1440,800 L1440,900 L0,900 Z;
+                     M0,800 C300,770 600,830 900,800 S1200,770 1440,800 L1440,900 L0,900 Z;
+                     M0,800 C300,750 600,850 900,800 S1200,750 1440,800 L1440,900 L0,900 Z"
+             dur="20s" repeatCount="indefinite"/>
+  </path>
+</svg>

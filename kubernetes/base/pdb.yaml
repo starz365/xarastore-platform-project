@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: xarastore-pdb
+  labels:
+    app: xarastore
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: xarastore
+      component: frontend
+      tier: web

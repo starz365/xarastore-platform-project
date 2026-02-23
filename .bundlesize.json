@@ -1,0 +1,69 @@
+{
+  "files": [
+    {
+      "path": ".next/static/chunks/*.js",
+      "maxSize": "170 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/css/*.css",
+      "maxSize": "20 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/runtime/*.js",
+      "maxSize": "10 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/*/pages/**/*.js",
+      "maxSize": "50 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/*/_app.js",
+      "maxSize": "100 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/*/_error.js",
+      "maxSize": "15 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/*/pages/index.js",
+      "maxSize": "80 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/*/pages/shop.js",
+      "maxSize": "60 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/*/pages/product/[slug].js",
+      "maxSize": "70 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/*/pages/cart.js",
+      "maxSize": "50 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/*/pages/checkout.js",
+      "maxSize": "90 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": ".next/static/*/pages/account/**/*.js",
+      "maxSize": "40 kB",
+      "compression": "gzip"
+    }
+  ],
+  "ci": {
+    "trackBranches": ["main", "develop"],
+    "repo": "xarastore/xarastore",
+    "disableGitHubChecks": false
+  }
+}

@@ -1,0 +1,88 @@
+import Link from 'next/link';
+import { getCollectionTypesWithCounts } from '@/lib/supabase/queries/collections';
+import { CollectionType } from '@/types/collections';
+
+/**
+ * NOTE:
+ * This is now a SERVER COMPONENT.
+ * All data fetching happens on the server to avoid hydration errors
+ * and illegal client-side Supabase usage.
+ */
+
+const typeIcons: Record<CollectionType, string> = {
+  seasonal: '🍂',
+  themed: '🎨',
+  editorial: '✍️',
+  trending: '🔥',
+  featured: '⭐',
+  new_arrivals: '🆕',
+  best_sellers: '🏆',
+  limited_time: '⏰',
+};
+
+const typeLabels: Record<CollectionType, string> = {
+  seasonal: 'Seasonal',
+  themed: 'Themed',
+  editorial: 'Editorial',
+  trending: 'Trending',
+  featured: 'Featured',
+  new_arrivals: 'New Arrivals',
+  best_sellers: 'Best Sellers',
+  limited_time: 'Limited Time',
+};
+
+const typeDescriptions: Record<CollectionType, string> = {
+  seasonal: 'Collections for current seasons and holidays',
+  themed: 'Products curated around specific themes',
+  editorial: 'Handpicked by our style experts',
+  trending: "What's popular right now",
+  featured: 'Our highlighted collections',
+  new_arrivals: 'Latest products and arrivals',
+  best_sellers: 'Customer favorites and top sellers',
+  limited_time: 'Special collections for a limited time',
+};
+
+export async function CollectionTypesGrid() {
+  const data = await getCollectionTypesWithCounts();
+
+  // Preserve original behavior: filter out zero-count types
+  const types = data.filter(item => item.count > 0);
+
+  if (types.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">No collection types available</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {types.map(({ type, count }) => (
+        <Link
+          key={type}
+          href={`/collections/type/${type}`}
+          className="group block"
+        >
+          <div className="bg-white hover:bg-red-50 border border-gray-200 hover:border-red-300 rounded-xl p-6 text-center transition-all duration-200 hover:shadow-md">
+            <div className="text-3xl mb-4 group-hover:scale-110 transition-transform">
+              {typeIcons[type] || '📦'}
+            </div>
+
+            <h3 className="font-semibold text-lg mb-2 group-hover:text-red-600 transition-colors">
+              {typeLabels[type]}
+            </h3>
+
+            <p className="text-sm text-gray-600 mb-3">
+              {typeDescriptions[type]}
+            </p>
+
+            <span className="inline-block px-3 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">
+              {count} collection{count !== 1 ? 's' : ''}
+            </span>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}

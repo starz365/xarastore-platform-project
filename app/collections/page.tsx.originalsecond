@@ -1,0 +1,716 @@
+import { Suspense } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { 
+  Sparkles, 
+  Clock, 
+  TrendingUp, 
+  Zap, 
+  Filter, 
+  Grid, 
+  List,
+  ChevronRight,
+  Star,
+  Eye,
+  ShoppingBag
+} from 'lucide-react';
+import { 
+  getFeaturedCollections, 
+  getAllCollections,
+  getCollectionTypes,
+  getCollectionStats,
+  getRecentlyUpdatedCollections
+} from '@/lib/supabase/queries/collections';
+import { EmptyState } from '@/components/product/EmptyState';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { CollectionFilters } from '@/components/collections/CollectionFilters';
+import { CollectionGridSkeleton } from '@/components/collections/CollectionGridSkeleton';
+import { supabase } from '@/lib/supabase/client';
+import { formatCurrency } from '@/lib/utils/currency';
+
+export const metadata = {
+  title: 'Curated Collections | Handpicked Product Selections | Xarastore',
+  description: 'Browse expertly curated collections of products. Discover themed selections, seasonal picks, and exclusive bundles for every occasion.',
+  openGraph: {
+    title: 'Collections - Curated Product Selections | Xarastore',
+    description: 'Discover handpicked product collections curated by our experts',
+    images: ['/og-collections.jpg'],
+  },
+};
+
+interface CollectionsPageProps {
+  searchParams: Promise<{
+    type?: string;
+    sort?: string;
+    page?: string;
+    q?: string;
+  }>;
+}
+
+export default async function CollectionsPage({ searchParams }: CollectionsPageProps) {
+  const params = await searchParams;
+  const page = parseInt(params.page || '1');
+  const pageSize = 12;
+  
+  // Fetch all data in parallel for optimal performance
+  const [
+    featuredCollections,
+    allCollectionsResponse,
+    collectionTypes,
+    collectionStats,
+    recentlyUpdated
+  ] = await Promise.all([
+    getFeaturedCollections(),
+    getAllCollections({
+      page,
+      pageSize,
+      type: params.type,
+      sort: params.sort || 'featured',
+      searchQuery: params.q,
+    }),
+    getCollectionTypes(),
+    getCollectionStats(),
+    getRecentlyUpdatedCollections(4),
+  ]);
+
+  const { collections: allCollections, total, totalPages } = allCollectionsResponse;
+
+  // Get random trending collections (for the hero section)
+  const trendingCollections = allCollections
+    .filter(c => c.isTrending)
+    .slice(0, 3);
+
+  // Fetch collection preview products for featured collections
+  const collectionsWithProducts = await Promise.all(
+    featuredCollections.slice(0, 3).map(async (collection) => {
+      const { data: products } = await supabase
+        .from('products')
+        .select('id, name, price, images, slug')
+        .eq('collection_id', collection.id)
+        .limit(3);
+      
+      return {
+        ...collection,
+        previewProducts: products || [],
+      };
+    })
+  );
+
+  // Get user's recently viewed collections (if authenticated)
+  const recentlyViewedIds: string[] = []; // Would come from user's browsing history
+  const recentlyViewedCollections = allCollections
+    .filter(c => recentlyViewedIds.includes(c.id))
+    .slice(0, 2);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
+      {/* Hero Section with Dynamic Data */}
+      <div className="relative bg-gradient-to-r from-red-600 via-red-700 to-red-800 text-white overflow-hidden">
+        <div className="absolute inset-0 bg-black/10" />
+        <div className="container-responsive relative py-12 md:py-20">
+          <div className="max-w-3xl">
+            <div className="flex items-center space-x-3 mb-6">
+              <Sparkles className="w-8 h-8" />
+              <Badge variant="outline" className="bg-white/20 text-white border-white/30">
+                {collectionStats.totalCollections.toLocaleString()} CURATED COLLECTIONS
+              </Badge>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-6">
+              Discover Expertly Curated Collections
+            </h1>
+            <p className="text-xl opacity-90 mb-8 max-w-2xl">
+              Handpicked product selections from our team of experts. 
+              Each collection tells a story and solves a specific need.
+            </p>
+            
+            {/* Dynamic Stats */}
+            <div className="flex flex-wrap gap-6">
+              <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
+                <Zap className="w-5 h-5" />
+                <div>
+                  <div className="font-bold text-lg">{collectionStats.featuredCount}</div>
+                  <div className="text-sm opacity-90">Featured Collections</div>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
+                <TrendingUp className="w-5 h-5" />
+                <div>
+                  <div className="font-bold text-lg">
+                    {collectionStats.totalProducts.toLocaleString()}
+                  </div>
+                  <div className="text-sm opacity-90">Total Products</div>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
+                <Clock className="w-5 h-5" />
+                <div>
+                  <div className="font-bold text-lg">{collectionStats.recentlyUpdated}</div>
+                  <div className="text-sm opacity-90">Recently Updated</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Trending Collections Preview */}
+          {trendingCollections.length > 0 && (
+            <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
+              {trendingCollections.map((collection) => (
+                <Link
+                  key={collection.id}
+                  href={`/collections/${collection.slug}`}
+                  className="group block bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-all"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                      <Image
+                        src={collection.image}
+                        alt={collection.name}
+                        width={64}
+                        height={64}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold truncate">{collection.name}</h3>
+                      <p className="text-sm opacity-90 truncate">{collection.description}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-sm">
+                          {collection.productCount} products
+                        </span>
+                        <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main Content with Filters */}
+      <div className="container-responsive py-8">
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Sidebar Filters */}
+          <aside className="lg:w-64 flex-shrink-0">
+            <div className="sticky top-24 space-y-6">
+              <Suspense fallback={<CollectionFiltersSkeleton />}>
+                <CollectionFilters 
+                  types={collectionTypes}
+                  stats={collectionStats}
+                  currentType={params.type}
+                />
+              </Suspense>
+
+              {/* Recently Updated */}
+              {recentlyUpdated.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                  <h3 className="font-bold mb-4 flex items-center">
+                    <Clock className="w-4 h-4 mr-2" />
+                    Recently Updated
+                  </h3>
+                  <div className="space-y-4">
+                    {recentlyUpdated.map((collection) => (
+                      <Link
+                        key={collection.id}
+                        href={`/collections/${collection.slug}`}
+                        className="flex items-center space-x-3 group"
+                      >
+                        <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                          <Image
+                            src={collection.image}
+                            alt={collection.name}
+                            width={48}
+                            height={48}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-sm truncate group-hover:text-red-600 transition-colors">
+                            {collection.name}
+                          </h4>
+                          <p className="text-xs text-gray-500">
+                            Updated {new Date(collection.updatedAt).toLocaleDateString('en-KE', { 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
+                          </p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Collection Tips */}
+              <div className="bg-gradient-to-br from-red-600 to-red-800 text-white rounded-xl p-6">
+                <h3 className="font-bold mb-4">Shopping Tips</h3>
+                <ul className="space-y-3 text-sm">
+                  <li className="flex items-start">
+                    <Star className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>Save collections to your wishlist</span>
+                  </li>
+                  <li className="flex items-start">
+                    <Eye className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>Preview collection products before opening</span>
+                  </li>
+                  <li className="flex items-start">
+                    <ShoppingBag className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>Add entire collections to cart with one click</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </aside>
+
+          {/* Main Content Area */}
+          <main className="flex-1">
+            {/* Toolbar */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold">All Collections</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {total.toLocaleString()} curated collections • {collectionStats.totalProducts.toLocaleString()} total products
+                  </p>
+                </div>
+                
+                <div className="flex items-center space-x-4">
+                  <div className="hidden md:flex items-center space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-600 hover:text-red-600"
+                    >
+                      <Grid className="w-4 h-4 mr-2" />
+                      Grid
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-600 hover:text-red-600"
+                    >
+                      <List className="w-4 h-4 mr-2" />
+                      List
+                    </Button>
+                  </div>
+                  
+                  <select
+                    defaultValue={params.sort || 'featured'}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-red-600 focus:ring-2 focus:ring-red-600/20 outline-none"
+                  >
+                    <option value="featured">Featured First</option>
+                    <option value="newest">Newest First</option>
+                    <option value="popular">Most Popular</option>
+                    <option value="product-count">Most Products</option>
+                    <option value="alphabetical">A to Z</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Search Results Info */}
+            {(params.q || params.type) && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-blue-900">
+                      {params.q ? `Search results for "${params.q}"` : `Filtered by ${params.type}`}
+                    </p>
+                    <p className="text-sm text-blue-700 mt-1">
+                      Found {total} collection{total !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    href="/collections"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Featured Collections with Product Previews */}
+            {featuredCollections.length > 0 && (
+              <section className="mb-12">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-3">
+                    <Sparkles className="w-6 h-6 text-red-600" />
+                    <h3 className="text-xl font-bold">Featured Collections</h3>
+                  </div>
+                  <Badge variant="default">
+                    Editor's Pick
+                  </Badge>
+                </div>
+
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {collectionsWithProducts.map((collection) => (
+                    <div
+                      key={collection.id}
+                      className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow duration-300"
+                    >
+                      <Link href={`/collections/${collection.slug}`}>
+                        <div className="relative h-48 overflow-hidden">
+                          <Image
+                            src={collection.image}
+                            alt={collection.name}
+                            fill
+                            className="object-cover hover:scale-105 transition-transform duration-300"
+                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                          <div className="absolute top-4 right-4">
+                            <Badge variant="danger" className="bg-white/90 backdrop-blur-sm text-gray-900">
+                              Featured
+                            </Badge>
+                          </div>
+                          <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+                            <h4 className="text-xl font-bold mb-2">{collection.name}</h4>
+                            <p className="text-sm text-white/90 line-clamp-2">
+                              {collection.description}
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+
+                      {/* Product Previews */}
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-sm font-medium text-gray-700">
+                            {collection.previewProducts.length} sample products
+                          </span>
+                          <span className="text-sm font-bold text-red-600">
+                            {collection.productCount} total
+                          </span>
+                        </div>
+
+                        <div className="space-y-3">
+                          {collection.previewProducts.map((product) => (
+                            <Link
+                              key={product.id}
+                              href={`/product/${product.slug}`}
+                              className="flex items-center space-x-3 group"
+                            >
+                              <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+                                {product.images?.[0] && (
+                                  <Image
+                                    src={product.images[0]}
+                                    alt={product.name}
+                                    width={40}
+                                    height={40}
+                                    className="w-full h-full object-cover"
+                                  />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate group-hover:text-red-600 transition-colors">
+                                  {product.name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {formatCurrency(product.price)}
+                                </p>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="w-full"
+                            asChild
+                          >
+                            <Link href={`/collections/${collection.slug}`}>
+                              View Full Collection
+                              <ChevronRight className="w-4 h-4 ml-2" />
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* All Collections Grid */}
+            <section>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold">All Collections</h3>
+                <span className="text-sm text-gray-600">
+                  Page {page} of {totalPages}
+                </span>
+              </div>
+
+              <Suspense fallback={<CollectionGridSkeleton count={12} />}>
+                {allCollections.length > 0 ? (
+                  <>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {allCollections.map((collection) => (
+                        <CollectionCard 
+                          key={collection.id} 
+                          collection={collection}
+                          showProductCount={true}
+                          showDescription={true}
+                          showStats={true}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="mt-12 flex justify-center">
+                        <nav className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={page <= 1}
+                            href={`/collections?page=${page - 1}${params.type ? `&type=${params.type}` : ''}${params.sort ? `&sort=${params.sort}` : ''}${params.q ? `&q=${params.q}` : ''}`}
+                          >
+                            Previous
+                          </Button>
+                          
+                          {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
+                            const pageNum = i + 1;
+                            return (
+                              <Button
+                                key={pageNum}
+                                variant={page === pageNum ? 'primary' : 'outline'}
+                                size="sm"
+                                href={`/collections?page=${pageNum}${params.type ? `&type=${params.type}` : ''}${params.sort ? `&sort=${params.sort}` : ''}${params.q ? `&q=${params.q}` : ''}`}
+                              >
+                                {pageNum}
+                              </Button>
+                            );
+                          })}
+                          
+                          {totalPages > 5 && (
+                            <>
+                              <span className="px-2">...</span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                href={`/collections?page=${totalPages}${params.type ? `&type=${params.type}` : ''}${params.sort ? `&sort=${params.sort}` : ''}${params.q ? `&q=${params.q}` : ''}`}
+                              >
+                                {totalPages}
+                              </Button>
+                            </>
+                          )}
+                          
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={page >= totalPages}
+                            href={`/collections?page=${page + 1}${params.type ? `&type=${params.type}` : ''}${params.sort ? `&sort=${params.sort}` : ''}${params.q ? `&q=${params.q}` : ''}`}
+                          >
+                            Next
+                          </Button>
+                        </nav>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <EmptyState
+                    title="No Collections Found"
+                    description={params.q || params.type 
+                      ? "No collections match your search criteria. Try different filters or search terms."
+                      : "Collections are being curated. Check back soon for amazing product selections."
+                    }
+                    icon="search"
+                    action={{
+                      label: 'Browse All Products',
+                      href: '/shop',
+                    }}
+                  />
+                )}
+              </Suspense>
+            </section>
+
+            {/* Recently Viewed (Conditional) */}
+            {recentlyViewedCollections.length > 0 && (
+              <section className="mt-12">
+                <h3 className="text-xl font-bold mb-6">Recently Viewed Collections</h3>
+                <div className="grid md:grid-cols-2 gap-6">
+                  {recentlyViewedCollections.map((collection) => (
+                    <CollectionCard 
+                      key={collection.id} 
+                      collection={collection}
+                      showProductCount={true}
+                      showDescription={false}
+                      showStats={false}
+                      compact={true}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </main>
+        </div>
+      </div>
+
+      {/* Collection Benefits */}
+      <section className="py-12 bg-gradient-to-b from-white to-gray-50 border-t border-gray-200">
+        <div className="container-responsive">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold mb-4">Why Shop From Collections?</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Our curated approach saves you time and ensures you get the best products for your needs
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-4 gap-8">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Expert Curation</h3>
+              <p className="text-gray-600 text-sm">
+                Each collection is handpicked by industry experts
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Zap className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Time Efficient</h3>
+              <p className="text-gray-600 text-sm">
+                Find complete solutions without endless browsing
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <TrendingUp className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Trend Focused</h3>
+              <p className="text-gray-600 text-sm">
+                Stay current with collections updated weekly
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Clock className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Limited Time Offers</h3>
+              <p className="text-gray-600 text-sm">
+                Exclusive deals only available in collections
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// Collection Card Component
+function CollectionCard({ 
+  collection, 
+  showProductCount = true,
+  showDescription = true,
+  showStats = false,
+  compact = false 
+}: { 
+  collection: any;
+  showProductCount?: boolean;
+  showDescription?: boolean;
+  showStats?: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <Link
+      href={`/collections/${collection.slug}`}
+      className="group block"
+    >
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:border-red-300 hover:shadow-lg transition-all duration-300">
+        {/* Collection Image */}
+        <div className={`relative overflow-hidden ${compact ? 'h-32' : 'h-48'}`}>
+          <Image
+            src={collection.image}
+            alt={collection.name}
+            fill
+            className="object-cover group-hover:scale-105 transition-transform duration-500"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+          
+          {/* Collection Badges */}
+          <div className="absolute top-3 left-3 flex flex-col gap-1">
+            {collection.isFeatured && (
+              <Badge variant="danger" className="bg-white/90 backdrop-blur-sm text-gray-900">
+                Featured
+              </Badge>
+            )}
+            {collection.isTrending && (
+              <Badge variant="default" className="bg-orange-500/90 text-white">
+                Trending
+              </Badge>
+            )}
+          </div>
+          
+          {/* Collection Info Overlay */}
+          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+            <h3 className={`font-bold ${compact ? 'text-lg' : 'text-xl'} mb-1`}>
+              {collection.name}
+            </h3>
+            {showProductCount && (
+              <p className="text-sm opacity-90">
+                {collection.productCount} product{collection.productCount !== 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Collection Details */}
+        <div className="p-4">
+          {showDescription && collection.description && (
+            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+              {collection.description}
+            </p>
+          )}
+          
+          {showStats && (
+            <div className="flex items-center justify-between text-sm text-gray-500 mb-3">
+              <span className="flex items-center">
+                <Eye className="w-4 h-4 mr-1" />
+                {collection.viewCount?.toLocaleString() || '0'} views
+              </span>
+              <span>
+                Updated {new Date(collection.updatedAt).toLocaleDateString('en-KE', { 
+                  month: 'short', 
+                  day: 'numeric' 
+                })}
+              </span>
+            </div>
+          )}
+          
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">
+              View Collection
+            </span>
+            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-red-600 group-hover:translate-x-1 transition-all" />
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function CollectionFiltersSkeleton() {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="h-6 bg-gray-200 rounded w-3/4 mb-4 animate-pulse"></div>
+      <div className="space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between">
+            <div className="h-4 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+            <div className="h-4 bg-gray-200 rounded w-8 animate-pulse"></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

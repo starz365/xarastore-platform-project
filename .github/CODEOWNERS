@@ -1,0 +1,121 @@
+xarastore/.github/CODEOWNERS
+# Global owners
+* @xarastore/tech-leads @xarastore/engineering-managers
+
+# Frontend specific
+/app/ @xarastore/frontend-team
+/components/ @xarastore/frontend-team
+/lib/hooks/ @xarastore/frontend-team
+/lib/utils/ @xarastore/frontend-team
+/types/ @xarastore/frontend-team
+
+# Backend specific
+/lib/supabase/ @xarastore/backend-team
+/services/ @xarastore/backend-team
+/app/api/ @xarastore/backend-team
+
+# Payment system
+/services/payment/ @xarastore/payments-team @xarastore/security-team
+/app/api/payment/ @xarastore/payments-team @xarastore/security-team
+/app/checkout/ @xarastore/payments-team
+
+# Security critical
+/middleware.ts @xarastore/security-team
+/lib/utils/security.ts @xarastore/security-team
+next.config.js @xarastore/security-team @xarastore/devops
+
+# Infrastructure
+Dockerfile* @xarastore/devops
+docker-compose*.yml @xarastore/devops
+.dockerignore @xarastore/devops
+/kubernetes/ @xarastore/devops
+
+# CI/CD
+/.github/workflows/ @xarastore/devops @xarastore/security-team
+/.github/dependabot.yml @xarastore/devops
+
+# Monitoring
+/monitoring/ @xarastore/devops @xarastore/sre
+
+# Database
+/supabase/ @xarastore/backend-team @xarastore/devops
+/lib/supabase/schemas/ @xarastore/backend-team
+
+# Configuration files
+package.json @xarastore/tech-leads
+package-lock.json @xarastore/tech-leads
+tsconfig.json @xarastore/tech-leads
+tailwind.config.js @xarastore/frontend-team
+next.config.js @xarastore/devops @xarastore/frontend-team
+
+# Tests
+/tests/ @xarastore/qa-team
+jest.config.js @xarastore/qa-team
+playwright.config.ts @xarastore/qa-team
+
+# Documentation
+/README.md @xarastore/tech-leads
+/CONTRIBUTING.md @xarastore/tech-leads
+/docs/ @xarastore/tech-leads
+
+# Environment files
+.env.example @xarastore/devops @xarastore/security-team
+.env.*.example @xarastore/devops @xarastore/security-team
+
+# Scripts
+/scripts/ @xarastore/devops
+
+# Public assets
+/public/ @xarastore/design-team @xarastore/frontend-team
+
+# Legal
+/app/legal/ @xarastore/legal-team
+/app/help/ @xarastore/support-team
+
+# Error pages
+/app/400/ @xarastore/frontend-team
+/app/500/ @xarastore/frontend-team
+/app/offline/ @xarastore/frontend-team
+
+# Authentication
+/app/auth/ @xarastore/security-team @xarastore/backend-team
+/lib/utils/auth.ts @xarastore/security-team
+
+# Performance critical
+/lib/utils/performance.ts @xarastore/sre
+/lib/utils/offline.ts @xarastore/sre
+/public/service-worker.js @xarastore/sre
+
+# SEO
+/app/sitemap.ts @xarastore/seo-team
+/app/robots.ts @xarastore/seo-team
+
+# Analytics
+/services/analytics/ @xarastore/data-team
+/app/api/analytics/ @xarastore/data-team
+
+# User account
+/app/account/ @xarastore/backend-team @xarastore/frontend-team
+/app/account/orders/ @xarastore/backend-team
+/app/account/wishlist/ @xarastore/frontend-team
+/app/account/addresses/ @xarastore/backend-team
+/app/account/profile/ @xarastore/backend-team
+
+# Product catalog
+/app/product/ @xarastore/backend-team @xarastore/frontend-team
+/app/category/ @xarastore/backend-team @xarastore/frontend-team
+/app/shop/ @xarastore/frontend-team
+/app/search/ @xarastore/backend-team @xarastore/frontend-team
+
+# Cart and checkout
+/app/cart/ @xarastore/payments-team @xarastore/frontend-team
+/app/checkout/ @xarastore/payments-team @xarastore/security-team
+
+# Deals and promotions
+/app/deals/ @xarastore/marketing-team @xarastore/frontend-team
+/components/deals/ @xarastore/marketing-team
+
+# Branding and design
+/styles/ @xarastore/design-team
+/app/globals.css @xarastore/design-team
+tailwind.config.js @xarastore/design-team

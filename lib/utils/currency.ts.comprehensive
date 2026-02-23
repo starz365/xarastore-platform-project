@@ -1,0 +1,490 @@
+import { z } from 'zod';
+
+// Currency configuration for Kenyan Shillings (KES)
+export const CURRENCY_CONFIG = {
+  code: 'KES',
+  symbol: 'KES',
+  name: 'Kenyan Shilling',
+  locale: 'en-KE',
+  decimalSeparator: '.',
+  thousandSeparator: ',',
+  decimalDigits: 0,
+  smallestUnit: 1, // 1 KSH
+  format: 'symbol', // 'symbol', 'code', or 'name'
+  position: 'before' as const, // 'before' or 'after'
+} as const;
+
+// ISO 4217 currency codes for validation
+export const VALID_CURRENCIES = {
+  KES: 'Kenyan Shilling',
+  USD: 'US Dollar',
+  EUR: 'Euro',
+  GBP: 'British Pound',
+  UGX: 'Ugandan Shilling',
+  TZS: 'Tanzanian Shilling',
+  RWF: 'Rwandan Franc',
+} as const;
+
+// Exchange rates (would be fetched from API in production)
+export const EXCHANGE_RATES: Record<string, number> = {
+  USD: 155.5,
+  EUR: 168.2,
+  GBP: 197.8,
+  UGX: 0.04,
+  TZS: 0.067,
+  RWF: 0.12,
+};
+
+// Zod schema for currency validation
+export const currencySchema = z.object({
+  amount: z.number().positive('Amount must be positive').finite('Amount must be finite'),
+  currency: z.enum(['KES', 'USD', 'EUR', 'GBP', 'UGX', 'TZS', 'RWF'] as const),
+});
+
+export type Currency = z.infer<typeof currencySchema>;
+
+/**
+ * Formats a number as Kenyan Shillings (KES)
+ */
+export function formatCurrency(
+  amount: number,
+  options: Intl.NumberFormatOptions = {}
+): string {
+  const defaultOptions: Intl.NumberFormatOptions = {
+    style: 'currency',
+    currency: CURRENCY_CONFIG.code,
+    currencyDisplay: CURRENCY_CONFIG.format,
+    minimumFractionDigits: CURRENCY_CONFIG.decimalDigits,
+    maximumFractionDigits: CURRENCY_CONFIG.decimalDigits,
+    useGrouping: true,
+  };
+
+  try {
+    return new Intl.NumberFormat(
+      CURRENCY_CONFIG.locale,
+      { ...defaultOptions, ...options }
+    ).format(amount);
+  } catch (error) {
+    console.error('Currency formatting error:', error);
+    // Fallback formatting
+    return `${CURRENCY_CONFIG.symbol} ${amount.toLocaleString(CURRENCY_CONFIG.locale, {
+      minimumFractionDigits: CURRENCY_CONFIG.decimalDigits,
+      maximumFractionDigits: CURRENCY_CONFIG.decimalDigits,
+    })}`;
+  }
+}
+
+/**
+ * Formats price with KES abbreviation for large amounts
+ */
+export function formatPrice(price: number, showCurrency: boolean = true): string {
+  if (price >= 1_000_000_000) {
+    const value = (price / 1_000_000_000).toFixed(2);
+    return `${showCurrency ? CURRENCY_CONFIG.symbol + ' ' : ''}${value}B`;
+  }
+  if (price >= 1_000_000) {
+    const value = (price / 1_000_000).toFixed(2);
+    return `${showCurrency ? CURRENCY_CONFIG.symbol + ' ' : ''}${value}M`;
+  }
+  if (price >= 1_000) {
+    const value = (price / 1_000).toFixed(2);
+    return `${showCurrency ? CURRENCY_CONFIG.symbol + ' ' : ''}${value}K`;
+  }
+  return `${showCurrency ? CURRENCY_CONFIG.symbol + ' ' : ''}${price.toLocaleString(CURRENCY_CONFIG.locale)}`;
+}
+
+/**
+ * Calculates discount percentage
+ */
+export function calculateDiscountPercentage(
+  originalPrice: number,
+  salePrice: number
+): number {
+  if (originalPrice <= 0 || salePrice <= 0) {
+    return 0;
+  }
+  
+  if (salePrice >= originalPrice) {
+    return 0;
+  }
+  
+  const discount = ((originalPrice - salePrice) / originalPrice) * 100;
+  return Math.round(discount * 100) / 100; // Round to 2 decimal places
+}
+
+/**
+ * Calculates tax amount (VAT at 16% for Kenya)
+ */
+export function calculateTax(
+  amount: number,
+  taxRate: number = 0.16
+): number {
+  if (amount <= 0) return 0;
+  
+  const tax = amount * taxRate;
+  // Round to nearest shilling (smallest unit)
+  return Math.round(tax / CURRENCY_CONFIG.smallestUnit) * CURRENCY_CONFIG.smallestUnit;
+}
+
+/**
+ * Calculates shipping cost based on amount
+ */
+export function calculateShipping(amount: number): number {
+  if (amount >= 5000) return 0; // Free shipping over 5000 KES
+  if (amount >= 3000) return 199; // Reduced shipping
+  if (amount >= 1000) return 299; // Standard shipping
+  return 499; // Minimum shipping
+}
+
+/**
+ * Formats phone number to Kenyan format
+ */
+export function formatPhoneNumber(phone: string): string {
+  // Remove all non-digit characters
+  const cleaned = phone.replace(/\D/g, '');
+  
+  // Check if already in international format
+  if (cleaned.startsWith('254') && cleaned.length === 12) {
+    return `+${cleaned}`;
+  }
+  
+  // Check if in local format (07...)
+  if (cleaned.startsWith('0') && cleaned.length === 10) {
+    return `+254${cleaned.substring(1)}`;
+  }
+  
+  // Check if in short format (7...)
+  if (cleaned.startsWith('7') && cleaned.length === 9) {
+    return `+254${cleaned}`;
+  }
+  
+  // Check if in short format with country code (254...)
+  if (cleaned.startsWith('254') && cleaned.length === 12) {
+    return `+${cleaned}`;
+  }
+  
+  // Return original if format unknown
+  return phone;
+}
+
+/**
+ * Validates Kenyan phone number
+ */
+export function validatePhoneNumber(phone: string): boolean {
+  const cleaned = phone.replace(/\D/g, '');
+  
+  // Kenyan mobile numbers patterns
+  const patterns = [
+    /^2547\d{8}$/,          // International format: +2547xxxxxxxx
+    /^07\d{8}$/,            // Local format: 07xxxxxxxx
+    /^7\d{8}$/,             // Short format: 7xxxxxxxx
+    /^\+2547\d{8}$/,        // International format with +
+    /^2541\d{8}$/,          // Safaricom landlines
+    /^011\d{6,7}$/,         // Nairobi landlines
+  ];
+  
+  return patterns.some(pattern => pattern.test(cleaned));
+}
+
+/**
+ * Converts amount from one currency to another
+ */
+export function convertCurrency(
+  amount: number,
+  fromCurrency: keyof typeof VALID_CURRENCIES,
+  toCurrency: keyof typeof VALID_CURRENCIES = 'KES'
+): number {
+  if (amount <= 0) return 0;
+  
+  if (fromCurrency === toCurrency) {
+    return amount;
+  }
+  
+  // Convert to USD first (base currency)
+  const usdAmount = fromCurrency === 'USD' 
+    ? amount 
+    : amount / EXCHANGE_RATES[fromCurrency];
+  
+  // Convert from USD to target currency
+  const targetAmount = toCurrency === 'USD'
+    ? usdAmount
+    : usdAmount * EXCHANGE_RATES[toCurrency];
+  
+  // Round to 2 decimal places
+  return Math.round(targetAmount * 100) / 100;
+}
+
+/**
+ * Parses currency string to number
+ */
+export function parseCurrency(currencyString: string): number {
+  // Remove currency symbols, spaces, and commas
+  const cleaned = currencyString
+    .replace(new RegExp(`[${CURRENCY_CONFIG.symbol}$€£]`, 'g'), '')
+    .replace(/[,\s]/g, '')
+    .trim();
+  
+  // Parse as float
+  const parsed = parseFloat(cleaned);
+  
+  // Return 0 if parsing fails
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Validates if amount is within acceptable range
+ */
+export function validateAmount(
+  amount: number,
+  min: number = 1,
+  max: number = 1_000_000_000
+): { valid: boolean; message?: string } {
+  if (amount < min) {
+    return {
+      valid: false,
+      message: `Amount must be at least ${formatCurrency(min)}`,
+    };
+  }
+  
+  if (amount > max) {
+    return {
+      valid: false,
+      message: `Amount cannot exceed ${formatCurrency(max)}`,
+    };
+  }
+  
+  if (!Number.isFinite(amount)) {
+    return {
+      valid: false,
+      message: 'Amount must be a valid number',
+    };
+  }
+  
+  return { valid: true };
+}
+
+/**
+ * Generates a random transaction reference
+ */
+export function generateTransactionReference(prefix: string = 'TXN'): string {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `${prefix}_${timestamp}_${random}`;
+}
+
+/**
+ * Calculates installment payments
+ */
+export function calculateInstallments(
+  totalAmount: number,
+  months: number = 3,
+  interestRate: number = 0.03 // 3% monthly interest
+): {
+  monthlyPayment: number;
+  totalWithInterest: number;
+  interestAmount: number;
+  schedule: Array<{
+    month: number;
+    payment: number;
+    principal: number;
+    interest: number;
+    remaining: number;
+  }>;
+} {
+  if (months <= 0) {
+    throw new Error('Number of months must be greater than 0');
+  }
+  
+  const monthlyInterestRate = interestRate / 12;
+  const monthlyPayment = totalAmount * monthlyInterestRate / 
+    (1 - Math.pow(1 + monthlyInterestRate, -months));
+  
+  const totalWithInterest = monthlyPayment * months;
+  const interestAmount = totalWithInterest - totalAmount;
+  
+  let remaining = totalAmount;
+  const schedule = [];
+  
+  for (let month = 1; month <= months; month++) {
+    const interest = remaining * monthlyInterestRate;
+    const principal = monthlyPayment - interest;
+    remaining -= principal;
+    
+    schedule.push({
+      month,
+      payment: Math.round(monthlyPayment),
+      principal: Math.round(principal),
+      interest: Math.round(interest),
+      remaining: Math.max(0, Math.round(remaining)),
+    });
+  }
+  
+  return {
+    monthlyPayment: Math.round(monthlyPayment),
+    totalWithInterest: Math.round(totalWithInterest),
+    interestAmount: Math.round(interestAmount),
+    schedule,
+  };
+}
+
+/**
+ * Formats date for financial transactions
+ */
+export function formatTransactionDate(date: Date | string): string {
+  const transactionDate = typeof date === 'string' ? new Date(date) : date;
+  
+  return transactionDate.toLocaleDateString(CURRENCY_CONFIG.locale, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+/**
+ * Validates M-Pesa transaction amount limits
+ */
+export function validateMpesaAmount(amount: number): { valid: boolean; message?: string } {
+  const minAmount = 10; // Minimum M-Pesa transaction
+  const maxAmount = 150000; // Maximum M-Pesa transaction per day
+  
+  if (amount < minAmount) {
+    return {
+      valid: false,
+      message: `M-Pesa minimum transaction is ${formatCurrency(minAmount)}`,
+    };
+  }
+  
+  if (amount > maxAmount) {
+    return {
+      valid: false,
+      message: `M-Pesa maximum transaction per day is ${formatCurrency(maxAmount)}`,
+    };
+  }
+  
+  return { valid: true };
+}
+
+/**
+ * Generates a formatted price breakdown for display
+ */
+export function generatePriceBreakdown(
+  subtotal: number,
+  options: {
+    shipping?: number;
+    tax?: number;
+    discount?: number;
+    coupon?: number;
+  } = {}
+): {
+  subtotal: number;
+  shipping: number;
+  tax: number;
+  discount: number;
+  total: number;
+  formatted: {
+    subtotal: string;
+    shipping: string;
+    tax: string;
+    discount: string;
+    total: string;
+  };
+} {
+  const shipping = options.shipping ?? calculateShipping(subtotal);
+  const tax = options.tax ?? calculateTax(subtotal);
+  const discount = options.discount ?? 0;
+  const coupon = options.coupon ?? 0;
+  
+  const totalDiscount = discount + coupon;
+  const total = Math.max(0, subtotal + shipping + tax - totalDiscount);
+  
+  return {
+    subtotal,
+    shipping,
+    tax,
+    discount: totalDiscount,
+    total,
+    formatted: {
+      subtotal: formatCurrency(subtotal),
+      shipping: formatCurrency(shipping),
+      tax: formatCurrency(tax),
+      discount: formatCurrency(totalDiscount),
+      total: formatCurrency(total),
+    },
+  };
+}
+
+/**
+ * Rounds amount to smallest currency unit (no decimals for KES)
+ */
+export function roundToSmallestUnit(amount: number): number {
+  return Math.round(amount / CURRENCY_CONFIG.smallestUnit) * CURRENCY_CONFIG.smallestUnit;
+}
+
+/**
+ * Validates currency code
+ */
+export function validateCurrencyCode(code: string): code is keyof typeof VALID_CURRENCIES {
+  return code in VALID_CURRENCIES;
+}
+
+/**
+ * Gets currency name from code
+ */
+export function getCurrencyName(code: keyof typeof VALID_CURRENCIES): string {
+  return VALID_CURRENCIES[code];
+}
+
+/**
+ * Creates a currency formatter with custom options
+ */
+export function createCurrencyFormatter(
+  locale: string = CURRENCY_CONFIG.locale,
+  currency: string = CURRENCY_CONFIG.code,
+  options: Intl.NumberFormatOptions = {}
+): (amount: number) => string {
+  const formatter = new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: CURRENCY_CONFIG.decimalDigits,
+    maximumFractionDigits: CURRENCY_CONFIG.decimalDigits,
+    ...options,
+  });
+  
+  return (amount: number) => formatter.format(amount);
+}
+
+/**
+ * Sanitizes monetary input
+ */
+export function sanitizeMonetaryInput(input: string): number {
+  // Remove all non-numeric characters except decimal point
+  const sanitized = input.replace(/[^\d.]/g, '');
+  
+  // Ensure only one decimal point
+  const parts = sanitized.split('.');
+  const integerPart = parts[0] || '';
+  const decimalPart = parts.length > 1 ? `.${parts[1]}` : '';
+  
+  // Parse as number
+  const number = parseFloat(integerPart + decimalPart);
+  
+  return isNaN(number) ? 0 : number;
+}
+
+/**
+ * Generates a human-readable amount description
+ */
+export function describeAmount(amount: number): string {
+  if (amount >= 1000000) {
+    const millions = (amount / 1000000).toFixed(1);
+    return `${millions} million shillings`;
+  }
+  if (amount >= 1000) {
+    const thousands = (amount / 1000).toFixed(1);
+    return `${thousands} thousand shillings`;
+  }
+  return `${amount.toLocaleString()} shillings`;
+}

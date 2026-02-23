@@ -1,0 +1,314 @@
+import Redis from 'ioredis';
+import { Logger } from '../logging/logger';
+
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const CACHE_TTL = 3600; // 1 hour in seconds
+
+class RedisCache {
+  private client: Redis;
+  private logger: Logger;
+  private isConnected: boolean = false;
+
+  constructor() {
+    this.client = new Redis(REDIS_URL, {
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      },
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: true,
+    });
+
+    this.logger = new Logger('RedisCache');
+
+    this.client.on('connect', () => {
+      this.isConnected = true;
+      this.logger.info('Redis client connected');
+    });
+
+    this.client.on('error', (error) => {
+      this.isConnected = false;
+      this.logger.error('Redis error:', error);
+    });
+
+    this.client.on('close', () => {
+      this.isConnected = false;
+      this.logger.warn('Redis connection closed');
+    });
+
+    this.client.on('reconnecting', () => {
+      this.logger.info('Redis reconnecting...');
+    });
+  }
+
+  async get<T>(key: string): Promise<T | null> {
+    try {
+      if (!this.isConnected) {
+        this.logger.warn('Redis not connected, returning null for key:', key);
+        return null;
+      }
+
+      const data = await this.client.get(key);
+      if (!data) return null;
+
+      return JSON.parse(data);
+    } catch (error) {
+      this.logger.error('Redis get error:', error);
+      return null;
+    }
+  }
+
+  async set<T>(key: string, value: T, ttl: number = CACHE_TTL): Promise<boolean> {
+    try {
+      if (!this.isConnected) {
+        this.logger.warn('Redis not connected, skipping set for key:', key);
+        return false;
+      }
+
+      const serialized = JSON.stringify(value);
+      
+      if (ttl > 0) {
+        await this.client.setex(key, ttl, serialized);
+      } else {
+        await this.client.set(key, serialized);
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.error('Redis set error:', error);
+      return false;
+    }
+  }
+
+  async del(key: string): Promise<boolean> {
+    try {
+      if (!this.isConnected) {
+        this.logger.warn('Redis not connected, skipping delete for key:', key);
+        return false;
+      }
+
+      const result = await this.client.del(key);
+      return result > 0;
+    } catch (error) {
+      this.logger.error('Redis delete error:', error);
+      return false;
+    }
+  }
+
+  async exists(key: string): Promise<boolean> {
+    try {
+      if (!this.isConnected) {
+        return false;
+      }
+
+      const result = await this.client.exists(key);
+      return result === 1;
+    } catch (error) {
+      this.logger.error('Redis exists error:', error);
+      return false;
+    }
+  }
+
+  async expire(key: string, ttl: number): Promise<boolean> {
+    try {
+      if (!this.isConnected) {
+        return false;
+      }
+
+      const result = await this.client.expire(key, ttl);
+      return result === 1;
+    } catch (error) {
+      this.logger.error('Redis expire error:', error);
+      return false;
+    }
+  }
+
+  async increment(key: string, by: number = 1): Promise<number | null> {
+    try {
+      if (!this.isConnected) {
+        return null;
+      }
+
+      const result = await this.client.incrby(key, by);
+      return result;
+    } catch (error) {
+      this.logger.error('Redis increment error:', error);
+      return null;
+    }
+  }
+
+  async decrement(key: string, by: number = 1): Promise<number | null> {
+    try {
+      if (!this.isConnected) {
+        return null;
+      }
+
+      const result = await this.client.decrby(key, by);
+      return result;
+    } catch (error) {
+      this.logger.error('Redis decrement error:', error);
+      return null;
+    }
+  }
+
+  async keys(pattern: string): Promise<string[]> {
+    try {
+      if (!this.isConnected) {
+        return [];
+      }
+
+      return await this.client.keys(pattern);
+    } catch (error) {
+      this.logger.error('Redis keys error:', error);
+      return [];
+    }
+  }
+
+  async flush(pattern?: string): Promise<boolean> {
+    try {
+      if (!this.isConnected) {
+        return false;
+      }
+
+      if (pattern) {
+        const keys = await this.keys(pattern);
+        if (keys.length > 0) {
+          await this.client.del(...keys);
+        }
+      } else {
+        await this.client.flushall();
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.error('Redis flush error:', error);
+      return false;
+    }
+  }
+
+  async getWithFallback<T>(
+    key: string,
+    fallback: () => Promise<T>,
+    ttl: number = CACHE_TTL
+  ): Promise<T> {
+    const cached = await this.get<T>(key);
+    
+    if (cached !== null) {
+      this.logger.debug('Cache hit for key:', key);
+      return cached;
+    }
+
+    this.logger.debug('Cache miss for key:', key);
+    const freshData = await fallback();
+    
+    if (freshData !== null && freshData !== undefined) {
+      await this.set(key, freshData, ttl);
+    }
+
+    return freshData;
+  }
+
+  async getMany<T>(keys: string[]): Promise<Map<string, T>> {
+    const result = new Map<string, T>();
+    
+    if (!this.isConnected || keys.length === 0) {
+      return result;
+    }
+
+    try {
+      const values = await this.client.mget(...keys);
+      
+      keys.forEach((key, index) => {
+        const value = values[index];
+        if (value) {
+          try {
+            result.set(key, JSON.parse(value));
+          } catch {
+            // Ignore parsing errors
+          }
+        }
+      });
+    } catch (error) {
+      this.logger.error('Redis getMany error:', error);
+    }
+
+    return result;
+  }
+
+  async setMany<T>(items: Array<{ key: string; value: T; ttl?: number }>): Promise<boolean> {
+    if (!this.isConnected || items.length === 0) {
+      return false;
+    }
+
+    try {
+      const pipeline = this.client.pipeline();
+      
+      items.forEach(({ key, value, ttl }) => {
+        const serialized = JSON.stringify(value);
+        
+        if (ttl && ttl > 0) {
+          pipeline.setex(key, ttl, serialized);
+        } else {
+          pipeline.set(key, serialized);
+        }
+      });
+
+      await pipeline.exec();
+      return true;
+    } catch (error) {
+      this.logger.error('Redis setMany error:', error);
+      return false;
+    }
+  }
+
+  async healthCheck(): Promise<{
+    status: 'healthy' | 'unhealthy';
+    latency?: number;
+    memory?: any;
+    info?: any;
+  }> {
+    try {
+      const start = Date.now();
+      await this.client.ping();
+      const latency = Date.now() - start;
+
+      const memory = await this.client.info('memory');
+      const info = await this.client.info();
+
+      return {
+        status: 'healthy',
+        latency,
+        memory,
+        info,
+      };
+    } catch (error) {
+      this.logger.error('Redis health check failed:', error);
+      return {
+        status: 'unhealthy',
+      };
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    try {
+      await this.client.quit();
+      this.isConnected = false;
+      this.logger.info('Redis client disconnected');
+    } catch (error) {
+      this.logger.error('Redis disconnect error:', error);
+    }
+  }
+
+  // Singleton instance
+  private static instance: RedisCache;
+  
+  static getInstance(): RedisCache {
+    if (!RedisCache.instance) {
+      RedisCache.instance = new RedisCache();
+    }
+    return RedisCache.instance;
+  }
+}
+
+export const redisCache = RedisCache.getInstance();
+export type { RedisCache };

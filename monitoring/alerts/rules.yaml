@@ -1,0 +1,364 @@
+groups:
+  - name: xarastore-app-alerts
+    rules:
+      # High error rate
+      - alert: HighHttpErrorRate
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+          * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+          environment: production
+          team: sre
+        annotations:
+          summary: "High HTTP error rate ({{ $value }}%)"
+          description: "HTTP error rate is above 5% for 5 minutes"
+          runbook: "https://runbooks.xarastore.com/high-http-error-rate"
+
+      # High latency
+      - alert: HighApiLatency
+        expr: |
+          histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2.5
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+          team: sre
+        annotations:
+          summary: "High API latency ({{ $value }}s)"
+          description: "95th percentile API latency is above 2.5 seconds"
+          runbook: "https://runbooks.xarastore.com/high-api-latency"
+
+      # Service down
+      - alert: ServiceDown
+        expr: up{job="xarastore-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          environment: production
+          team: sre
+        annotations:
+          summary: "Service {{ $labels.instance }} is down"
+          description: "Service has been down for more than 1 minute"
+          runbook: "https://runbooks.xarastore.com/service-down"
+
+      # High CPU usage
+      - alert: HighCpuUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          environment: production
+          team: sre
+        annotations:
+          summary: "High CPU usage ({{ $value }}%)"
+          description: "CPU usage is above 80% for 10 minutes"
+          runbook: "https://runbooks.xarastore.com/high-cpu-usage"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)
+          / node_memory_MemTotal_bytes * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          environment: production
+          team: sre
+        annotations:
+          summary: "High memory usage ({{ $value }}%)"
+          description: "Memory usage is above 85% for 10 minutes"
+          runbook: "https://runbooks.xarastore.com/high-memory-usage"
+
+      # Disk running out
+      - alert: DiskRunningOut
+        expr: |
+          (node_filesystem_size_bytes - node_filesystem_free_bytes)
+          / node_filesystem_size_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+          team: sre
+        annotations:
+          summary: "Disk usage high ({{ $value }}%)"
+          description: "Disk usage is above 80% for 5 minutes"
+          runbook: "https://runbooks.xarastore.com/disk-running-out"
+
+      # Redis down
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          environment: production
+          team: sre
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been down for more than 1 minute"
+          runbook: "https://runbooks.xarastore.com/redis-down"
+
+      # High Redis memory usage
+      - alert: HighRedisMemoryUsage
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+          team: sre
+        annotations:
+          summary: "High Redis memory usage ({{ $value }}%)"
+          description: "Redis memory usage is above 90% for 5 minutes"
+          runbook: "https://runbooks.xarastore.com/high-redis-memory"
+
+      # PostgreSQL down
+      - alert: PostgresqlDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          environment: production
+          team: sre
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been down for more than 1 minute"
+          runbook: "https://runbooks.xarastore.com/postgresql-down"
+
+      # High PostgreSQL connections
+      - alert: HighPostgresqlConnections
+        expr: |
+          pg_stat_database_numbackends > 100
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+          team: sre
+        annotations:
+          summary: "High PostgreSQL connections ({{ $value }})"
+          description: "PostgreSQL has more than 100 connections for 5 minutes"
+          runbook: "https://runbooks.xarastore.com/high-postgresql-connections"
+
+      # Payment failure rate
+      - alert: HighPaymentFailureRate
+        expr: |
+          sum(rate(payment_attempts_total{status="failed"}[10m]))
+          /
+          sum(rate(payment_attempts_total[10m]))
+          * 100 > 10
+        for: 5m
+        labels:
+          severity: critical
+          environment: production
+          team: payments
+        annotations:
+          summary: "High payment failure rate ({{ $value }}%)"
+          description: "Payment failure rate is above 10% for 5 minutes"
+          runbook: "https://runbooks.xarastore.com/high-payment-failure"
+
+      # Order processing delay
+      - alert: OrderProcessingDelay
+        expr: |
+          time() - xarastore_order_created_timestamp > 300
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+          team: operations
+        annotations:
+          summary: "Order processing delay ({{ $value }}s)"
+          description: "Orders are taking more than 5 minutes to process"
+          runbook: "https://runbooks.xarastore.com/order-processing-delay"
+
+      # Low inventory alert
+      - alert: LowInventory
+        expr: |
+          xarastore_product_stock < 10
+        for: 0m
+        labels:
+          severity: warning
+          environment: production
+          team: inventory
+        annotations:
+          summary: "Low inventory for product {{ $labels.product_id }}"
+          description: "Product stock is below 10 units"
+          runbook: "https://runbooks.xarastore.com/low-inventory"
+
+      # High cart abandonment
+      - alert: HighCartAbandonment
+        expr: |
+          sum(rate(cart_abandoned_total[1h]))
+          /
+          sum(rate(cart_created_total[1h]))
+          * 100 > 70
+        for: 1h
+        labels:
+          severity: warning
+          environment: production
+          team: marketing
+        annotations:
+          summary: "High cart abandonment rate ({{ $value }}%)"
+          description: "Cart abandonment rate is above 70% for 1 hour"
+          runbook: "https://runbooks.xarastore.com/high-cart-abandonment"
+
+      # API rate limit exceeded
+      - alert: ApiRateLimitExceeded
+        expr: |
+          rate(http_requests_total{status_code="429"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          environment: production
+          team: sre
+        annotations:
+          summary: "API rate limit exceeded"
+          description: "More than 10 rate limit errors in 5 minutes"
+          runbook: "https://runbooks.xarastore.com/api-rate-limit"
+
+      # SSL certificate expiring
+      - alert: SslCertificateExpiring
+        expr: |
+          probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+        for: 0m
+        labels:
+          severity: warning
+          environment: production
+          team: devops
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate expires in less than 30 days"
+          runbook: "https://runbooks.xarastore.com/ssl-certificate-expiring"
+
+      # DNS resolution failure
+      - alert: DnsResolutionFailure
+        expr: |
+          probe_success == 0
+        for: 2m
+        labels:
+          severity: critical
+          environment: production
+          team: devops
+        annotations:
+          summary: "DNS resolution failure"
+          description: "DNS resolution has failed for 2 minutes"
+          runbook: "https://runbooks.xarastore.com/dns-resolution-failure"
+
+  - name: xarastore-business-alerts
+    rules:
+      # Revenue drop
+      - alert: RevenueDrop
+        expr: |
+          xarastore_revenue_1h / xarastore_revenue_1h offset 1h < 0.5
+        for: 1h
+        labels:
+          severity: critical
+          environment: production
+          team: business
+        annotations:
+          summary: "Revenue drop detected"
+          description: "Revenue has dropped by more than 50% compared to previous hour"
+          runbook: "https://runbooks.xarastore.com/revenue-drop"
+
+      # Zero orders alert
+      - alert: ZeroOrders
+        expr: |
+          xarastore_orders_1h == 0
+        for: 1h
+        labels:
+          severity: critical
+          environment: production
+          team: business
+        annotations:
+          summary: "Zero orders detected"
+          description: "No orders placed in the last hour"
+          runbook: "https://runbooks.xarastore.com/zero-orders"
+
+      # User registration drop
+      - alert: UserRegistrationDrop
+        expr: |
+          xarastore_user_registrations_1h / xarastore_user_registrations_1h offset 1h < 0.3
+        for: 2h
+        labels:
+          severity: warning
+          environment: production
+          team: marketing
+        annotations:
+          summary: "User registration drop"
+          description: "User registrations have dropped by more than 70%"
+          runbook: "https://runbooks.xarastore.com/user-registration-drop"
+
+      # High refund rate
+      - alert: HighRefundRate
+        expr: |
+          xarastore_refunds_24h / xarastore_orders_24h * 100 > 10
+        for: 6h
+        labels:
+          severity: warning
+          environment: production
+          team: operations
+        annotations:
+          summary: "High refund rate ({{ $value }}%)"
+          description: "Refund rate is above 10% for 6 hours"
+          runbook: "https://runbooks.xarastore.com/high-refund-rate"
+
+  - name: xarastore-security-alerts
+    rules:
+      # Brute force attack
+      - alert: BruteForceAttack
+        expr: |
+          sum(rate(authentication_failures_total[5m])) > 100
+        for: 2m
+        labels:
+          severity: critical
+          environment: production
+          team: security
+        annotations:
+          summary: "Possible brute force attack"
+          description: "More than 100 authentication failures in 5 minutes"
+          runbook: "https://runbooks.xarastore.com/brute-force-attack"
+
+      # SQL injection attempt
+      - alert: SqlInjectionAttempt
+        expr: |
+          sum(rate(http_requests_total{path=~".*sql.*|.*union.*|.*select.*"}[5m])) > 10
+        for: 2m
+        labels:
+          severity: critical
+          environment: production
+          team: security
+        annotations:
+          summary: "Possible SQL injection attempt"
+          description: "Multiple requests with SQL keywords detected"
+          runbook: "https://runbooks.xarastore.com/sql-injection-attempt"
+
+      # XSS attack attempt
+      - alert: XssAttackAttempt
+        expr: |
+          sum(rate(http_requests_total{path=~".*<script>.*|.*javascript:.*"}[5m])) > 10
+        for: 2m
+        labels:
+          severity: critical
+          environment: production
+          team: security
+        annotations:
+          summary: "Possible XSS attack attempt"
+          description: "Multiple requests with script tags detected"
+          runbook: "https://runbooks.xarastore.com/xss-attempt"
+
+      # DDoS attack
+      - alert: DdosAttack
+        expr: |
+          sum(rate(http_requests_total[1m])) > 10000
+        for: 1m
+        labels:
+          severity: critical
+          environment: production
+          team: security
+        annotations:
+          summary: "Possible DDoS attack"
+          description: "More than 10,000 requests per minute detected"
+          runbook: "https://runbooks.xarastore.com/ddos-attack"

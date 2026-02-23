@@ -1,0 +1,89 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Clock } from 'lucide-react';
+
+interface DealTimerProps {
+  targetTime: Date;
+  className?: string;
+}
+
+interface TimeRemaining {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  expired: boolean;
+}
+
+// Hoisted function: safe to use in useState lazy init
+function calculateTimeRemaining(targetTime: Date): TimeRemaining {
+  const difference = targetTime.getTime() - Date.now();
+
+  if (difference <= 0) {
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, expired: true };
+  }
+
+  return {
+    days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+    hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+    minutes: Math.floor((difference / 1000 / 60) % 60),
+    seconds: Math.floor((difference / 1000) % 60),
+    expired: false,
+  };
+}
+
+export function DealTimer({ targetTime, className = '' }: DealTimerProps) {
+  const [timeRemaining, setTimeRemaining] = useState<TimeRemaining>(
+    () => calculateTimeRemaining(targetTime) // lazy init
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeRemaining(calculateTimeRemaining(targetTime));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [targetTime]);
+
+  if (timeRemaining.expired) {
+    return (
+      <div className={`flex items-center space-x-2 ${className}`}>
+        <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium">
+          Deal expired
+        </span>
+      </div>
+    );
+  }
+
+  const format = (v: number) => v.toString().padStart(2, '0');
+
+  return (
+    <div className={`flex items-center space-x-4 ${className}`}>
+      <div className="flex items-center space-x-2">
+        <Clock className="w-5 h-5 text-red-600" />
+        <span className="font-semibold">Ends in:</span>
+      </div>
+      <div className="flex items-center space-x-2">
+        <TimeUnit value={format(timeRemaining.days)} label="Days" />
+        <span className="text-red-600 font-bold">:</span>
+        <TimeUnit value={format(timeRemaining.hours)} label="Hours" />
+        <span className="text-red-600 font-bold">:</span>
+        <TimeUnit value={format(timeRemaining.minutes)} label="Min" />
+        <span className="text-red-600 font-bold">:</span>
+        <TimeUnit value={format(timeRemaining.seconds)} label="Sec" />
+      </div>
+    </div>
+  );
+}
+
+function TimeUnit({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="text-center">
+      <div className="w-12 h-12 bg-red-600 text-white rounded-lg flex items-center justify-center font-bold text-lg">
+        {value}
+      </div>
+      <span className="text-xs text-gray-600 mt-1 block">{label}</span>
+    </div>
+  );
+}

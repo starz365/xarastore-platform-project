@@ -1,0 +1,243 @@
+import { Suspense } from 'react';
+import { Filter, Grid, List } from 'lucide-react';
+import { ProductGrid } from '@/components/product/ProductGrid';
+import { SearchFilters } from '@/components/search/SearchFilters';
+import { Button } from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { getProductsByCategory } from '@/lib/supabase/queries/products';
+
+export const metadata = {
+  title: 'Shop All Products | Xarastore',
+  description: 'Browse thousands of products across all categories. Find electronics, fashion, home goods, and more at unbeatable prices.',
+};
+
+interface ShopPageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function ShopPage({ searchParams }: ShopPageProps) {
+  const params = await searchParams;
+  const category = typeof params.category === 'string' ? params.category : undefined;
+  const sort = typeof params.sort === 'string' ? params.sort : 'newest';
+  const page = typeof params.page === 'string' ? parseInt(params.page) : 1;
+  
+  const { products, total } = await getProductsByCategory(category || 'all', page, 24);
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-gradient-to-r from-red-600 to-red-800 text-white py-12">
+        <div className="container-responsive">
+          <h1 className="text-4xl md:text-5xl font-bold mb-4">Shop Everything</h1>
+          <p className="text-xl opacity-90">
+            Discover {total.toLocaleString()} amazing products across all categories
+          </p>
+        </div>
+      </div>
+
+      <div className="container-responsive py-8">
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Sidebar Filters */}
+          <aside className="lg:w-64 flex-shrink-0">
+            <div className="sticky top-24">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-bold flex items-center">
+                    <Filter className="w-5 h-5 mr-2" />
+                    Filters
+                  </h2>
+                  <Button variant="ghost" size="sm" className="text-red-600">
+                    Clear All
+                  </Button>
+                </div>
+                <Suspense fallback={<FilterSkeleton />}>
+                  <SearchFilters />
+                </Suspense>
+              </div>
+              
+              {/* Categories Quick Links */}
+              <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 className="font-bold mb-4">Popular Categories</h3>
+                <div className="space-y-3">
+                  {[
+                    { name: 'Electronics', count: '1,240', href: '/category/electronics' },
+                    { name: 'Fashion', count: '856', href: '/category/fashion' },
+                    { name: 'Home & Garden', count: '720', href: '/category/home-garden' },
+                    { name: 'Beauty', count: '430', href: '/category/beauty' },
+                    { name: 'Sports', count: '310', href: '/category/sports' },
+                  ].map((cat) => (
+                    <a
+                      key={cat.name}
+                      href={cat.href}
+                      className="flex items-center justify-between py-2 hover:text-red-600 transition-colors"
+                    >
+                      <span>{cat.name}</span>
+                      <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        {cat.count}
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Main Content */}
+          <main className="flex-1">
+            {/* Toolbar */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center space-x-4">
+                  <div className="hidden md:flex items-center space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-600 hover:text-red-600"
+                    >
+                      <Grid className="w-4 h-4 mr-2" />
+                      Grid
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-600 hover:text-red-600"
+                    >
+                      <List className="w-4 h-4 mr-2" />
+                      List
+                    </Button>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Showing {((page - 1) * 24) + 1}-{Math.min(page * 24, total)} of {total.toLocaleString()} products
+                  </p>
+                </div>
+                
+                <div className="flex items-center space-x-4">
+                  <select
+                    defaultValue={sort}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-red-600 focus:ring-2 focus:ring-red-600/20 outline-none"
+                  >
+                    <option value="newest">Newest Arrivals</option>
+                    <option value="price-low">Price: Low to High</option>
+                    <option value="price-high">Price: High to Low</option>
+                    <option value="rating">Top Rated</option>
+                    <option value="popular">Most Popular</option>
+                  </select>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Button variant="ghost" size="sm" disabled={page <= 1}>
+                      Previous
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      Page {page} of {Math.ceil(total / 24)}
+                    </span>
+                    <Button variant="ghost" size="sm" disabled={page * 24 >= total}>
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Products Grid */}
+            <Suspense fallback={<ProductGridSkeleton />}>
+              <ProductGrid products={products} />
+            </Suspense>
+
+            {/* Pagination */}
+            {total > 24 && (
+              <div className="mt-12 flex justify-center">
+                <nav className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page <= 1}
+                    href={`/shop?page=${page - 1}`}
+                  >
+                    Previous
+                  </Button>
+                  
+                  {Array.from({ length: Math.min(5, Math.ceil(total / 24)) }).map((_, i) => {
+                    const pageNum = i + 1;
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={page === pageNum ? 'primary' : 'outline'}
+                        size="sm"
+                        href={`/shop?page=${pageNum}`}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                  
+                  {Math.ceil(total / 24) > 5 && (
+                    <>
+                      <span className="px-2">...</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        href={`/shop?page=${Math.ceil(total / 24)}`}
+                      >
+                        {Math.ceil(total / 24)}
+                      </Button>
+                    </>
+                  )}
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page * 24 >= total}
+                    href={`/shop?page=${page + 1}`}
+                  >
+                    Next
+                  </Button>
+                </nav>
+              </div>
+            )}
+
+            {/* Shop Features */}
+            <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-gradient-to-r from-red-600 to-red-800 text-white rounded-xl p-6">
+                <h3 className="text-xl font-bold mb-3">Free Delivery</h3>
+                <p className="opacity-90">On orders over KES 2,000 across Kenya</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-6">
+                <h3 className="text-xl font-bold mb-3">Easy Returns</h3>
+                <p className="text-gray-600">30-day return policy for all items</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-6">
+                <h3 className="text-xl font-bold mb-3">Secure Payment</h3>
+                <p className="text-gray-600">100% secure payment with encryption</p>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FilterSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="h-4 bg-gray-200 rounded w-1/2 mb-3"></div>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between py-2">
+            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-200 rounded w-8"></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProductGridSkeleton() {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <Skeleton key={i} className="h-64 rounded-xl" />
+      ))}
+    </div>
+  );
+}

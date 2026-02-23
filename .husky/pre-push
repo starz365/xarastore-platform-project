@@ -1,0 +1,42 @@
+xarastore/.husky/pre-push
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🚀 Running pre-push checks..."
+
+# Run tests
+echo "🧪 Running tests..."
+npm test -- --passWithNoTests
+
+if [ $? -ne 0 ]; then
+  echo "❌ Tests failed. Please fix before pushing."
+  exit 1
+fi
+
+# Check TypeScript
+echo "📋 Checking TypeScript..."
+npx tsc --noEmit
+
+if [ $? -ne 0 ]; then
+  echo "❌ TypeScript errors found. Please fix before pushing."
+  exit 1
+fi
+
+# Security audit
+echo "🔒 Running security audit..."
+npm audit --audit-level=high
+
+if [ $? -ne 0 ]; then
+  echo "⚠️  Security vulnerabilities found. Consider fixing before pushing."
+  read -p "Continue anyway? (y/N) " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    exit 1
+  fi
+fi
+
+# Bundle size check
+echo "📦 Checking bundle size..."
+npx next build 2>&1 | grep -E "(First Load JS|✓|●)"
+
+echo "✅ All pre-push checks passed!"

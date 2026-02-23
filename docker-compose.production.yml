@@ -1,0 +1,213 @@
+version: '3.8'
+
+x-common-variables: &common-variables
+  NODE_ENV: production
+  NEXT_TELEMETRY_DISABLED: 1
+  NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+  SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+  MPESA_CONSUMER_KEY: ${MPESA_CONSUMER_KEY}
+  MPESA_CONSUMER_SECRET: ${MPESA_CONSUMER_SECRET}
+  MPESA_SHORT_CODE: ${MPESA_SHORT_CODE}
+  MPESA_PASSKEY: ${MPESA_PASSKEY}
+  REDIS_URL: redis://redis:6379
+  DATABASE_URL: postgresql://postgres:${SUPABASE_DB_PASSWORD}@${NEXT_PUBLIC_SUPABASE_URL#*//}:5432/postgres
+
+services:
+  app-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+      args:
+        <<: *common-variables
+    image: xarastore/production:${BUILD_NUMBER:-latest}
+    container_name: xarastore-app-blue
+    expose:
+      - "3000"
+    environment:
+      <<: *common-variables
+      PORT: 3000
+      INSTANCE_ID: blue
+    volumes:
+      - app-blue-data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - xarastore-production
+
+  app-green:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+      args:
+        <<: *common-variables
+    image: xarastore/production:${BUILD_NUMBER:-latest}
+    container_name: xarastore-app-green
+    expose:
+      - "3000"
+    environment:
+      <<: *common-variables
+      PORT: 3000
+      INSTANCE_ID: green
+    volumes:
+      - app-green-data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - xarastore-production
+
+  redis:
+    image: redis:7-alpine
+    container_name: xarastore-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-production-data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    networks:
+      - xarastore-production
+
+  nginx:
+    image: nginx:alpine
+    container_name: xarastore-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.production.conf:/etc/nginx/nginx.conf
+      - ./ssl/certificate.crt:/etc/ssl/certificate.crt
+      - ./ssl/private.key:/etc/ssl/private.key
+      - ./public:/usr/share/nginx/html
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - app-blue
+      - app-green
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    networks:
+      - xarastore-production
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: xarastore-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_POLL_INTERVAL=300
+    command: --interval 300
+    restart: unless-stopped
+    networks:
+      - xarastore-production
+
+  monitor:
+    image: prom/prometheus:latest
+    container_name: xarastore-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - xarastore-production
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: xarastore-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - monitor
+    restart: unless-stopped
+    networks:
+      - xarastore-production
+
+volumes:
+  redis-production-data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_SERVER},rw
+      device: ":/mnt/redis"
+  app-blue-data:
+    driver: local
+  app-green-data:
+    driver: local
+  nginx-logs:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  xarastore-production:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1500
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

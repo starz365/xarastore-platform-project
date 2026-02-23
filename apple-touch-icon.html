@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Apple Touch Icon - XaraStore</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            background: #f5f5f5;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        .icon-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .instructions {
+            max-width: 600px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="icon-container">
+        <svg width="180" height="180" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg" id="apple-touch-icon">
+            <!-- Background with gradient -->
+            <defs>
+                <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+                </linearGradient>
+                <filter id="shadow">
+                    <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+                </filter>
+            </defs>
+            
+            <!-- Rounded background -->
+            <rect width="180" height="180" rx="40" fill="url(#bgGradient)"/>
+            
+            <!-- Shopping bag icon -->
+            <g transform="translate(45, 45)">
+                <!-- Bag body -->
+                <path d="M 15 30 L 10 90 L 80 90 L 75 30 Z" 
+                      fill="white" opacity="0.95" filter="url(#shadow)"/>
+                
+                <!-- Bag handles -->
+                <path d="M 25 30 Q 25 15 45 15 Q 65 15 65 30" 
+                      stroke="white" stroke-width="4" fill="none" 
+                      stroke-linecap="round" opacity="0.95"/>
+                
+                <!-- Accent lines -->
+                <line x1="15" y1="30" x2="75" y2="30" 
+                      stroke="white" stroke-width="3" opacity="0.8"/>
+                
+                <!-- Brand initial 'X' -->
+                <text x="45" y="70" 
+                      font-family="Arial, sans-serif" 
+                      font-size="32" 
+                      font-weight="bold" 
+                      fill="#667eea" 
+                      text-anchor="middle">X</text>
+            </g>
+        </svg>
+    </div>
+
+    <div class="instructions">
+        <h2>📱 Apple Touch Icon Instructions</h2>
+        <p><strong>Method 1: Save as PNG (Recommended)</strong></p>
+        <ol>
+            <li>Right-click on the icon above</li>
+            <li>Select "Save Image As..." or take a screenshot</li>
+            <li>Save as <code>apple-touch-icon.png</code></li>
+            <li>Move to <code>public/icons/apple-touch-icon.png</code></li>
+        </ol>
+        
+        <p><strong>Method 2: Use online converter</strong></p>
+        <ol>
+            <li>Right-click the SVG code below and copy</li>
+            <li>Visit <a href="https://svgtopng.com" target="_blank">svgtopng.com</a></li>
+            <li>Paste the SVG code and convert to 180x180 PNG</li>
+            <li>Download and save to <code>public/icons/apple-touch-icon.png</code></li>
+        </ol>
+
+        <p><strong>Method 3: Screenshot</strong></p>
+        <ol>
+            <li>Take a screenshot of the icon above</li>
+            <li>Crop to 180x180 pixels</li>
+            <li>Save to <code>public/icons/apple-touch-icon.png</code></li>
+        </ol>
+    </div>
+
+    <details>
+        <summary>Click to view SVG code</summary>
+        <textarea readonly style="width: 100%; height: 200px; font-family: monospace; padding: 10px;" id="svgCode"></textarea>
+    </details>
+
+    <script>
+        // Copy SVG code to textarea for easy copying
+        const svg = document.getElementById('apple-touch-icon').outerHTML;
+        document.getElementById('svgCode').value = svg;
+    </script>
+</body>
+</html>

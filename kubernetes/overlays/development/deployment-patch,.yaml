@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xarastore-app
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: app
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+        env:
+        - name: DEBUG
+          value: "true"
+        - name: NODE_OPTIONS
+          value: "--inspect=0.0.0.0:9229"
+        ports:
+        - name: debug
+          containerPort: 9229
+          protocol: TCP

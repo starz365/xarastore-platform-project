@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xarastore-config
+  labels:
+    app: xarastore
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  HOSTNAME: "0.0.0.0"
+  NEXT_TELEMETRY_DISABLED: "1"
+  LOG_LEVEL: "info"
+  CORS_ORIGIN: "https://xarastore.com,https://www.xarastore.com"
+  SENTRY_DSN: "__SENTRY_DSN__"
+  SENTRY_ENVIRONMENT: "production"
+  GA_MEASUREMENT_ID: "__GA_MEASUREMENT_ID__"
+  REDIS_TTL: "3600"
+  SESSION_MAX_AGE: "86400"
+  RATE_LIMIT_WINDOW_MS: "900000"
+  RATE_LIMIT_MAX_REQUESTS: "100"
+  API_TIMEOUT: "30000"
+  CACHE_CONTROL_MAX_AGE: "31536000"
+  IMAGE_QUALITY: "75"
+  IMAGE_SIZES: "640,750,828,1080,1200,1920,2048"
+  PWA_CACHE_VERSION: "v1"
+  SERVICE_WORKER_ENABLED: "true"
+  OFFLINE_MODE_ENABLED: "true"
+  COMPRESSION_ENABLED: "true"
+  SECURE_COOKIES: "true"
+  CSP_ENABLED: "true"
+  HSTS_ENABLED: "true"
+  XSS_PROTECTION_ENABLED: "true"
+  CONTENT_TYPE_OPTIONS_ENABLED: "true"
+  REFERRER_POLICY: "strict-origin-when-cross-origin"
+  PERMISSIONS_POLICY: "camera=(), microphone=(), geolocation=()"

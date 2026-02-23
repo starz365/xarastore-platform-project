@@ -1,0 +1,55 @@
+# ============================================================================
+# XARASTORE DEVELOPMENT DOCKERFILE
+# ============================================================================
+# For local development with hot reload and debugging
+
+FROM node:18-alpine AS development
+
+# Install system dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git \
+    curl \
+    bash \
+    postgresql-client \
+    redis \
+    tzdata
+
+# Set timezone
+ENV TZ=Africa/Nairobi
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY yarn.lock ./
+
+# Install dependencies (including dev dependencies)
+RUN npm ci --include=dev
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p \
+    .next \
+    node_modules/.cache \
+    /tmp/uploads
+
+# Set permissions
+RUN chown -R node:node /app
+USER node
+
+# Expose ports
+EXPOSE 3000 9229
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Development entry point
+CMD ["npm", "run", "dev"]

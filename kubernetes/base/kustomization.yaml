@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: xarastore-production
+commonLabels:
+  app: xarastore
+  managed-by: kustomize
+  environment: production
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - configmap.yaml
+  - hpa.yaml
+  - pdb.yaml
+images:
+  - name: xarastore
+    newName: ghcr.io/xarastore/xarastore-app
+    newTag: latest
+configMapGenerator:
+  - name: xarastore-config
+    behavior: merge
+    literals:
+      - APP_VERSION=1.0.0
+      - BUILD_TIMESTAMP=2024-01-01T00:00:00Z
+      - GIT_COMMIT=latest
+secretGenerator:
+  - name: xarastore-secrets
+    behavior: merge
+    literals:
+      - supabase-url=https://your-project.supabase.co
+      - supabase-anon-key=your-anon-key
+      - supabase-service-role-key=your-service-role-key
+      - mpesa-consumer-key=your-consumer-key
+      - mpesa-consumer-secret=your-consumer-secret
+      - mpesa-short-code=your-short-code
+      - mpesa-passkey=your-passkey
+      - database-url=postgresql://user:password@host:5432/db
+      - stripe-secret-key=your-stripe-secret-key
+      - jwt-secret=your-jwt-secret
+      - encryption-key=your-encryption-key

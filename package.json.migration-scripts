@@ -1,0 +1,5 @@
+Add these to your package.json "scripts" section:
+
+  "migrate": "node scripts/run-migrations.js",
+  "migrate:sh": "./scripts/run-migrations.sh",
+  "migrate:manual": "echo 'Visit: https://supabase.com/dashboard/project/nglrobuvqexkyykzgusj/sql/new' && echo 'Then run migrations in order from lib/supabase/migrations/'"

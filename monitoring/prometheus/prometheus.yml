@@ -1,0 +1,176 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: 'production'
+    region: 'af-south-1'
+    cluster: 'xarastore-cluster'
+
+rule_files:
+  - 'alerts/rules.yaml'
+  - 'alerts/recording_rules.yaml'
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+  # Xarastore application
+  - job_name: 'xarastore-app'
+    metrics_path: '/metrics'
+    scheme: 'http'
+    static_configs:
+      - targets: ['xarastore-app.xarastore-production.svc.cluster.local:3000']
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+)(?::\d+)?'
+        replacement: '${1}'
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: '(go_|process_|promhttp_).*'
+        action: drop
+
+  # Node.js metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter.xarastore-production.svc.cluster.local:9100']
+    scrape_interval: 30s
+
+  # Kubernetes API
+  - job_name: 'kubernetes-apiservers'
+    kubernetes_sd_configs:
+      - role: endpoints
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      insecure_skip_verify: true
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+
+  # Kubernetes nodes
+  - job_name: 'kubernetes-nodes'
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      insecure_skip_verify: true
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics
+
+  # Kubernetes pods
+  - job_name: 'kubernetes-pods'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        action: replace
+        target_label: container
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['xarastore-redis-master.xarastore-production.svc.cluster.local:6379']
+    metrics_path: '/metrics'
+    params:
+      format: [prometheus]
+    scrape_interval: 30s
+
+  # PostgreSQL
+  - job_name: 'postgresql'
+    static_configs:
+      - targets: ['postgresql.xarastore-production.svc.cluster.local:9187']
+    scrape_interval: 30s
+
+  # Blackbox exporter for external monitoring
+  - job_name: 'blackbox'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - https://xarastore.com
+        - https://xarastore.com/api/health
+        - https://xarastore.com/shop
+        - https://xarastore.com/checkout
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter.xarastore-production.svc.cluster.local:9115
+
+  # Application specific metrics
+  - job_name: 'xarastore-business'
+    static_configs:
+      - targets: ['xarastore-app.xarastore-production.svc.cluster.local:3000']
+    metrics_path: '/api/metrics/business'
+    scrape_interval: 60s
+    scrape_timeout: 30s
+
+  # Custom metrics endpoint
+  - job_name: 'xarastore-custom'
+    static_configs:
+      - targets: ['xarastore-app.xarastore-production.svc.cluster.local:3000']
+    metrics_path: '/api/metrics/custom'
+    scrape_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager.xarastore-production.svc.cluster.local:9093
+
+remote_write:
+  - url: "https://prometheus-us-central1.grafana.net/api/prom/push"
+    basic_auth:
+      username: "12345"
+      password: "${GRAFANA_CLOUD_PROMETHEUS_PASSWORD}"
+    write_relabel_configs:
+      - source_labels: [environment]
+        regex: production
+        action: keep
+
+remote_read:
+  - url: "https://prometheus-us-central1.grafana.net/api/prom/push"
+    basic_auth:
+      username: "12345"
+      password: "${GRAFANA_CLOUD_PROMETHEUS_PASSWORD}"
+    read_recent: true

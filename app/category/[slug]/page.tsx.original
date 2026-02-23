@@ -1,0 +1,314 @@
+import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
+import { Filter, Star, Shield, Truck } from 'lucide-react';
+import { ProductGrid } from '@/components/product/ProductGrid';
+import { SearchFilters } from '@/components/search/SearchFilters';
+import { Button } from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { getProductsByCategory, getCategories } from '@/lib/supabase/queries/products';
+
+interface CategoryPageProps {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export async function generateMetadata({ params }: CategoryPageProps) {
+  const { slug } = await params;
+  const categories = await getCategories();
+  const category = categories.find(c => c.slug === slug);
+
+  if (!category) {
+    return {
+      title: 'Category Not Found | Xarastore',
+      description: 'Category not found',
+    };
+  }
+
+  return {
+    title: `${category.name} | Shop ${category.name} Online | Xarastore`,
+    description: `Discover amazing ${category.name.toLowerCase()} products at unbeatable prices. Shop the best deals on Xarastore.`,
+  };
+}
+
+export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {
+  const { slug } = await params;
+  const paramsObj = await searchParams;
+  
+  const categories = await getCategories();
+  const category = categories.find(c => c.slug === slug);
+
+  if (!category) {
+    notFound();
+  }
+
+  const page = typeof paramsObj.page === 'string' ? parseInt(paramsObj.page) : 1;
+  const sort = typeof paramsObj.sort === 'string' ? paramsObj.sort : 'newest';
+  
+  const { products, total } = await getProductsByCategory(category.id, page, 24);
+
+  const subcategories = [
+    { name: 'Best Sellers', count: 124, icon: '🔥' },
+    { name: 'New Arrivals', count: 89, icon: '🆕' },
+    { name: 'On Sale', count: 56, icon: '💰' },
+    { name: 'Top Rated', count: 203, icon: '⭐' },
+    { name: 'Featured', count: 45, icon: '🏆' },
+  ];
+
+  const features = [
+    { icon: Truck, title: 'Free Shipping', description: 'On orders over KES 2,000' },
+    { icon: Shield, title: '2-Year Warranty', description: 'On selected items' },
+    { icon: Star, title: 'Top Brands', description: 'Guaranteed quality' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Category Hero */}
+      <div className="bg-gradient-to-r from-red-600 to-red-800 text-white py-12">
+        <div className="container-responsive">
+          <nav className="text-sm mb-4">
+            <ol className="flex items-center space-x-2">
+              <li>
+                <a href="/" className="opacity-80 hover:opacity-100 transition-opacity">
+                  Home
+                </a>
+              </li>
+              <li>/</li>
+              <li>
+                <a href="/shop" className="opacity-80 hover:opacity-100 transition-opacity">
+                  Shop
+                </a>
+              </li>
+              <li>/</li>
+              <li className="font-medium">{category.name}</li>
+            </ol>
+          </nav>
+          
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <h1 className="text-4xl md:text-5xl font-bold mb-4">{category.name}</h1>
+              <p className="text-xl opacity-90 max-w-2xl">
+                {category.description || `Discover the best ${category.name.toLowerCase()} products at unbeatable prices. Quality guaranteed with fast delivery.`}
+              </p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="text-center">
+                <div className="text-3xl font-bold">{total.toLocaleString()}+</div>
+                <div className="text-sm opacity-80">Products</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container-responsive py-8">
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Sidebar Filters */}
+          <aside className="lg:w-64 flex-shrink-0">
+            <div className="sticky top-24">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-bold flex items-center">
+                    <Filter className="w-5 h-5 mr-2" />
+                    Filters
+                  </h2>
+                  <Button variant="ghost" size="sm" className="text-red-600">
+                    Clear All
+                  </Button>
+                </div>
+                <Suspense fallback={<FilterSkeleton />}>
+                  <SearchFilters />
+                </Suspense>
+              </div>
+
+              {/* Subcategories */}
+              <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 className="font-bold mb-4">Shop by Type</h3>
+                <div className="space-y-3">
+                  {subcategories.map((subcat) => (
+                    <a
+                      key={subcat.name}
+                      href={`/category/${slug}?type=${subcat.name.toLowerCase().replace(/\s+/g, '-')}`}
+                      className="flex items-center justify-between py-2 group"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="text-lg">{subcat.icon}</span>
+                        <span className="text-gray-700 group-hover:text-red-600 transition-colors">
+                          {subcat.name}
+                        </span>
+                      </div>
+                      <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        {subcat.count}
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+
+              {/* Category Features */}
+              <div className="mt-6 bg-gradient-to-br from-red-600 to-red-800 text-white rounded-xl p-6">
+                <h3 className="font-bold mb-4">Why Shop {category.name}?</h3>
+                <div className="space-y-4">
+                  {features.map((feature, index) => {
+                    const Icon = feature.icon;
+                    return (
+                      <div key={index} className="flex items-start space-x-3">
+                        <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold">{feature.title}</h4>
+                          <p className="text-sm opacity-90">{feature.description}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Main Content */}
+          <main className="flex-1">
+            {/* Toolbar */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">
+                    Showing {((page - 1) * 24) + 1}-{Math.min(page * 24, total)} of {total.toLocaleString()} products
+                  </p>
+                </div>
+                
+                <div className="flex items-center space-x-4">
+                  <select
+                    defaultValue={sort}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-red-600 focus:ring-2 focus:ring-red-600/20 outline-none"
+                  >
+                    <option value="newest">Newest Arrivals</option>
+                    <option value="price-low">Price: Low to High</option>
+                    <option value="price-high">Price: High to Low</option>
+                    <option value="rating">Top Rated</option>
+                    <option value="popular">Most Popular</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Products Grid */}
+            <Suspense fallback={<ProductGridSkeleton />}>
+              <ProductGrid products={products} />
+            </Suspense>
+
+            {/* Pagination */}
+            {total > 24 && (
+              <div className="mt-12 flex justify-center">
+                <nav className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page <= 1}
+                    href={`/category/${slug}?page=${page - 1}`}
+                  >
+                    Previous
+                  </Button>
+                  
+                  {Array.from({ length: Math.min(5, Math.ceil(total / 24)) }).map((_, i) => {
+                    const pageNum = i + 1;
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={page === pageNum ? 'primary' : 'outline'}
+                        size="sm"
+                        href={`/category/${slug}?page=${pageNum}`}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                  
+                  {Math.ceil(total / 24) > 5 && (
+                    <>
+                      <span className="px-2">...</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        href={`/category/${slug}?page=${Math.ceil(total / 24)}`}
+                      >
+                        {Math.ceil(total / 24)}
+                      </Button>
+                    </>
+                  )}
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page * 24 >= total}
+                    href={`/category/${slug}?page=${page + 1}`}
+                  >
+                    Next
+                  </Button>
+                </nav>
+              </div>
+            )}
+
+            {/* Category Description */}
+            <div className="mt-12 bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+              <h2 className="text-2xl font-bold mb-6">About {category.name}</h2>
+              <div className="prose max-w-none">
+                <p className="text-gray-700 mb-4">
+                  Discover the finest selection of {category.name.toLowerCase()} products on Xarastore. 
+                  We carefully curate our collection to bring you only the best items from trusted brands 
+                  and manufacturers.
+                </p>
+                <p className="text-gray-700 mb-4">
+                  Whether you're looking for the latest technology, premium quality materials, 
+                  or unbeatable value, you'll find it here. All our {category.name.toLowerCase()} products 
+                  come with our quality guarantee and excellent customer support.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <div className="text-2xl font-bold text-red-600 mb-2">100%</div>
+                    <p className="text-gray-700">Authentic Products</p>
+                  </div>
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <div className="text-2xl font-bold text-red-600 mb-2">30 Days</div>
+                    <p className="text-gray-700">Easy Returns</p>
+                  </div>
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <div className="text-2xl font-bold text-red-600 mb-2">24/7</div>
+                    <p className="text-gray-700">Customer Support</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FilterSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="h-4 bg-gray-200 rounded w-1/2 mb-3"></div>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between py-2">
+            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-200 rounded w-8"></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProductGridSkeleton() {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <Skeleton key={i} className="h-64 rounded-xl" />
+      ))}
+    </div>
+  );
+}

@@ -1,0 +1,144 @@
+import { z } from 'zod';
+
+export const emailSchema = z
+  .string()
+  .email('Please enter a valid email address')
+  .min(1, 'Email is required');
+
+export const passwordSchema = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one number')
+  .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
+
+export const phoneSchema = z
+  .string()
+  .min(10, 'Phone number must be at least 10 digits')
+  .regex(/^(?:\+?254|0)?[17]\d{8}$/, 'Please enter a valid Kenyan phone number');
+
+export const nameSchema = z
+  .string()
+  .min(2, 'Name must be at least 2 characters')
+  .max(100, 'Name must be less than 100 characters');
+
+export const addressSchema = z.object({
+  name: nameSchema,
+  phone: phoneSchema,
+  street: z.string().min(5, 'Street address is required'),
+  city: z.string().min(2, 'City is required'),
+  state: z.string().min(2, 'State/County is required'),
+  postalCode: z.string().min(3, 'Postal code is required'),
+  country: z.string().min(2, 'Country is required'),
+  isDefault: z.boolean().optional(),
+});
+
+export const productSchema = z.object({
+  name: z.string().min(3, 'Product name is required'),
+  description: z.string().min(10, 'Description is required'),
+  price: z.number().min(0, 'Price must be positive'),
+  originalPrice: z.number().min(0).optional(),
+  sku: z.string().min(1, 'SKU is required'),
+  brandId: z.string().uuid('Invalid brand'),
+  categoryId: z.string().uuid('Invalid category'),
+  stock: z.number().int().min(0, 'Stock must be non-negative'),
+  images: z.array(z.string().url()).min(1, 'At least one image is required'),
+});
+
+export const reviewSchema = z.object({
+  rating: z.number().int().min(1).max(5, 'Rating must be between 1 and 5'),
+  title: z.string().max(200, 'Title too long').optional(),
+  comment: z.string().min(10, 'Comment must be at least 10 characters'),
+  images: z.array(z.string().url()).max(5, 'Maximum 5 images allowed').optional(),
+});
+
+export const orderSchema = z.object({
+  items: z.array(z.object({
+    productId: z.string().uuid(),
+    variantId: z.string().uuid().optional(),
+    quantity: z.number().int().min(1),
+  })).min(1, 'At least one item is required'),
+  shippingAddress: addressSchema,
+  billingAddress: addressSchema.optional(),
+  paymentMethod: z.enum(['mpesa', 'card', 'bank']),
+});
+
+export const couponSchema = z.object({
+  code: z.string().min(3, 'Coupon code is required'),
+  discountType: z.enum(['percentage', 'fixed']),
+  discountValue: z.number().min(0, 'Discount value must be positive'),
+  minPurchase: z.number().min(0, 'Minimum purchase must be non-negative').optional(),
+  maxDiscount: z.number().min(0, 'Maximum discount must be non-negative').optional(),
+  validFrom: z.string().datetime(),
+  validUntil: z.string().datetime(),
+  usageLimit: z.number().int().min(1, 'Usage limit must be at least 1').optional(),
+});
+
+export function validateEmail(email: string): boolean {
+  return emailSchema.safeParse(email).success;
+}
+
+export function validatePhone(phone: string): boolean {
+  return phoneSchema.safeParse(phone).success;
+}
+
+export function validatePassword(password: string): string[] {
+  const errors: string[] = [];
+  
+  if (password.length < 8) errors.push('Password must be at least 8 characters');
+  if (!/[A-Z]/.test(password)) errors.push('Password must contain at least one uppercase letter');
+  if (!/[a-z]/.test(password)) errors.push('Password must contain at least one lowercase letter');
+  if (!/[0-9]/.test(password)) errors.push('Password must contain at least one number');
+  if (!/[^A-Za-z0-9]/.test(password)) errors.push('Password must contain at least one special character');
+  
+  return errors;
+}
+
+export function validateCreditCard(cardNumber: string): boolean {
+  // Luhn algorithm
+  const cleaned = cardNumber.replace(/\D/g, '');
+  if (cleaned.length < 13 || cleaned.length > 19) return false;
+  
+  let sum = 0;
+  let isEven = false;
+  
+  for (let i = cleaned.length - 1; i >= 0; i--) {
+    let digit = parseInt(cleaned.charAt(i), 10);
+    
+    if (isEven) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    
+    sum += digit;
+    isEven = !isEven;
+  }
+  
+  return sum % 10 === 0;
+}
+
+export function validateExpiryDate(expiry: string): boolean {
+  const [month, year] = expiry.split('/').map(Number);
+  if (!month || !year || month < 1 || month > 12) return false;
+  
+  const now = new Date();
+  const currentYear = now.getFullYear() % 100;
+  const currentMonth = now.getMonth() + 1;
+  
+  if (year < currentYear) return false;
+  if (year === currentYear && month < currentMonth) return false;
+  
+  return true;
+}
+
+export function validateCVC(cvc: string): boolean {
+  return /^\d{3,4}$/.test(cvc);
+}
+
+export function validatePostalCode(code: string, country: string = 'KE'): boolean {
+  if (country === 'KE') {
+    return /^\d{5}$/.test(code);
+  }
+  return /^\d{4,10}$/.test(code);
+}

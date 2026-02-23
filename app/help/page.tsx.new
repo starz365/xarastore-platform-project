@@ -1,0 +1,46 @@
+import { HelpCenter } from '@/components/help/HelpCenter';
+import { ContactForm } from '@/components/help/ContactForm';
+import { HelpLinks } from '@/components/help/HelpLinks';
+import { FAQSection } from '@/components/help/FAQSection';
+
+export const metadata = {
+  title: 'Help Center & Support | Xarastore',
+  description: 'Get help with your orders, shipping, returns, and more. Contact Xarastore support for assistance.',
+};
+
+export default function HelpPage() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Hero */}
+      <div className="bg-gradient-to-r from-red-600 to-red-800 text-white">
+        <div className="container-responsive py-12 md:py-16">
+          <div className="max-w-3xl">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+              How can we help?
+            </h1>
+            <p className="text-xl opacity-90">
+              Find answers, get support, and learn more about shopping on Xarastore.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="container-responsive py-8">
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Left Column - Help Links */}
+          <div className="lg:col-span-2 space-y-8">
+            <HelpCenter />
+            <FAQSection />
+          </div>
+
+          {/* Right Column - Contact & Resources */}
+          <div className="space-y-8">
+            <ContactForm />
+            <HelpLinks />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

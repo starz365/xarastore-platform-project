@@ -1,0 +1,984 @@
+/* Print Styles */
+@media print {
+  /* Reset all colors for print */
+  *,
+  *::before,
+  *::after {
+    color: #000 !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Set base font for print */
+  body {
+    font-family: "Georgia", "Times New Roman", serif;
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #000 !important;
+    background: #fff !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Hide unnecessary elements */
+  .no-print,
+  .print\\:hidden,
+  nav,
+  .nav,
+  .navigation,
+  .header,
+  .footer,
+  .sidebar,
+  .modal,
+  .modal-backdrop,
+  .toast,
+  .notification,
+  .btn,
+  button:not(.print-btn),
+  .form-actions,
+  .cart-actions,
+  .checkout-actions,
+  .social-share,
+  .share-buttons,
+  .comments,
+  .comment-form,
+  .advertisement,
+  .ads,
+  .banner,
+  .promotion,
+  .newsletter,
+  .subscribe-form,
+  .video,
+  .audio,
+  .slider,
+  .carousel,
+  .lightbox,
+  .tooltip,
+  .popover,
+  .dropdown,
+  .select-dropdown,
+  .datepicker,
+  .timepicker,
+  .colorpicker,
+  .file-upload,
+  .drag-drop,
+  .sortable,
+  .draggable,
+  .resizable,
+  .scrollbar,
+  .scrollbar-track,
+  .scrollbar-thumb,
+  .loading,
+  .spinner,
+  .progress-bar,
+  .progress-ring,
+  .skeleton,
+  .placeholder,
+  .lazy-load,
+  .infinite-scroll,
+  .virtual-scroll,
+  .marquee,
+  .ticker,
+  .countdown,
+  .timer,
+  .counter,
+  .rating-input,
+  .star-rating,
+  .emoji-picker,
+  .reaction-picker,
+  .poll,
+  .survey,
+  .quiz,
+  .game,
+  .puzzle,
+  .chat,
+  .messenger,
+  .notification-bell,
+  .badge-notification,
+  .online-indicator,
+  .status-indicator,
+  .presence-indicator,
+  .typing-indicator,
+  .read-receipt,
+  .typing-dots,
+  .wave,
+  .ripple,
+  .pulse,
+  .bounce,
+  .shake,
+  .wobble,
+  .jello,
+  .swing,
+  .tada,
+  .flash,
+  .heartbeat,
+  .blink,
+  .float,
+  .hang,
+  .skew,
+  .fold,
+  .roll,
+  .rotate,
+  .slide,
+  .zoom,
+  .flip,
+  .reveal,
+  .highlight,
+  .marker,
+  .underline,
+  .strikethrough,
+  .overline,
+  .blur,
+  .grayscale,
+  .sepia,
+  .invert,
+  .hue-rotate,
+  .saturate,
+  .contrast,
+  .brightness,
+  .drop-shadow,
+  .backdrop-blur,
+  .backdrop-grayscale,
+  .backdrop-sepia,
+  .backdrop-invert,
+  .backdrop-opacity,
+  .backdrop-saturate,
+  .backdrop-contrast,
+  .backdrop-brightness,
+  .mask,
+  .clip-path,
+  .shape-outside,
+  .filter,
+  .backdrop-filter,
+  .mix-blend,
+  .background-blend,
+  .isolation,
+  .perspective,
+  .transform-style,
+  .backface-visibility,
+  .transform,
+  .translate,
+  .scale,
+  .rotate,
+  .skew,
+  .transform-origin,
+  .will-change,
+  .contain,
+  .content-visibility,
+  .contain-intrinsic-size,
+  .overscroll,
+  .scroll-behavior,
+  .scroll-snap,
+  .scroll-margin,
+  .scroll-padding,
+  .touch-action,
+  .user-select,
+  .cursor,
+  .pointer-events,
+  .resize,
+  .scrollbar,
+  .accent-color,
+  .caret-color,
+  .outline,
+  .outline-offset,
+  .ring,
+  .ring-offset,
+  .ring-color,
+  .ring-width,
+  .ring-offset-width,
+  .ring-offset-color,
+  .divide,
+  .divide-width,
+  .divide-color,
+  .divide-style,
+  .divide-opacity,
+  .placeholder,
+  .placeholder-color,
+  .placeholder-opacity,
+  .selection,
+  .selection-color,
+  .selection-bg,
+  .file,
+  .file-input,
+  .file-button,
+  .file-label,
+  .file-name,
+  .file-cta,
+  .file-icon,
+  .file-name,
+  .control,
+  .control.has-icons-left,
+  .control.has-icons-right,
+  .icon,
+  .icon.is-left,
+  .icon.is-right,
+  .help,
+  .progress,
+  .progress-bar,
+  .progress-value,
+  .progress-text,
+  .breadcrumb,
+  .breadcrumb-item,
+  .breadcrumb-separator,
+  .pagination,
+  .pagination-list,
+  .pagination-link,
+  .pagination-ellipsis,
+  .pagination-previous,
+  .pagination-next,
+  .tabs,
+  .tab,
+  .tab-content,
+  .tab-pane,
+  .panel,
+  .panel-heading,
+  .panel-block,
+  .panel-icon,
+  .panel-tabs,
+  .dropdown,
+  .dropdown-trigger,
+  .dropdown-menu,
+  .dropdown-content,
+  .dropdown-item,
+  .dropdown-divider,
+  .message,
+  .message-header,
+  .message-body,
+  .modal,
+  .modal-background,
+  .modal-content,
+  .modal-close,
+  .modal-card,
+  .modal-card-head,
+  .modal-card-title,
+  .modal-card-foot,
+  .modal-card-body,
+  .navbar,
+  .navbar-brand,
+  .navbar-burger,
+  .navbar-menu,
+  .navbar-start,
+  .navbar-end,
+  .navbar-item,
+  .navbar-link,
+  .navbar-dropdown,
+  .navbar-divider,
+  .hero,
+  .hero-body,
+  .hero-head,
+  .hero-foot,
+  .section,
+  .footer,
+  .tile,
+  .tile.is-ancestor,
+  .tile.is-parent,
+  .tile.is-child,
+  .tile.is-vertical,
+  .tile.is-horizontal,
+  .level,
+  .level-left,
+  .level-right,
+  .level-item,
+  .media,
+  .media-left,
+  .media-right,
+  .media-content,
+  .menu,
+  .menu-label,
+  .menu-list,
+  .message,
+  .message-header,
+  .message-body,
+  .notification,
+  .notification.is-light,
+  .notification.is-dark,
+  .notification.is-primary,
+  .notification.is-link,
+  .notification.is-info,
+  .notification.is-success,
+  .notification.is-warning,
+  .notification.is-danger,
+  .delete,
+  .loader,
+  .box,
+  .button,
+  .buttons,
+  .content,
+  .image,
+  .notification,
+  .progress,
+  .table,
+  .tag,
+  .title,
+  .subtitle,
+  .block,
+  .delete,
+  .heading,
+  .highlight,
+  .loader,
+  .number,
+  .select,
+  .textarea,
+  .input,
+  .checkbox,
+  .radio,
+  .switch,
+  .file,
+  .breadcrumb,
+  .card,
+  .dropdown,
+  .menu,
+  .message,
+  .modal,
+  .navbar,
+  .pagination,
+  .panel,
+  .tabs,
+  .hero,
+  .section,
+  .footer,
+  .tile,
+  .level,
+  .media,
+  .notification,
+  .progress,
+  .table,
+  .tag,
+  .title,
+  .subtitle {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .print-only,
+  .print\\:block,
+  .print {
+    display: block !important;
+  }
+
+  .print-inline {
+    display: inline !important;
+  }
+
+  .print-inline-block {
+    display: inline-block !important;
+  }
+
+  .print-flex {
+    display: flex !important;
+  }
+
+  .print-inline-flex {
+    display: inline-flex !important;
+  }
+
+  .print-grid {
+    display: grid !important;
+  }
+
+  .print-inline-grid {
+    display: inline-grid !important;
+  }
+
+  /* Page breaks */
+  .break-before-auto {
+    break-before: auto;
+  }
+
+  .break-before-avoid {
+    break-before: avoid;
+  }
+
+  .break-before-all {
+    break-before: all;
+  }
+
+  .break-before-avoid-page {
+    break-before: avoid-page;
+  }
+
+  .break-before-page {
+    break-before: page;
+  }
+
+  .break-before-left {
+    break-before: left;
+  }
+
+  .break-before-right {
+    break-before: right;
+  }
+
+  .break-before-column {
+    break-before: column;
+  }
+
+  .break-inside-auto {
+    break-inside: auto;
+  }
+
+  .break-inside-avoid {
+    break-inside: avoid;
+  }
+
+  .break-inside-avoid-page {
+    break-inside: avoid-page;
+  }
+
+  .break-inside-avoid-column {
+    break-inside: avoid-column;
+  }
+
+  .break-after-auto {
+    break-after: auto;
+  }
+
+  .break-after-avoid {
+    break-after: avoid;
+  }
+
+  .break-after-all {
+    break-after: all;
+  }
+
+  .break-after-avoid-page {
+    break-after: avoid-page;
+  }
+
+  .break-after-page {
+    break-after: page;
+  }
+
+  .break-after-left {
+    break-after: left;
+  }
+
+  .break-after-right {
+    break-after: right;
+  }
+
+  .break-after-column {
+    break-after: column;
+  }
+
+  /* Prevent page breaks inside important elements */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  blockquote,
+  pre,
+  table,
+  img,
+  .print-keep-together {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Force page breaks before headings */
+  h1,
+  h2 {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* Links */
+  a,
+  a:visited {
+    color: #000 !important;
+    text-decoration: underline;
+  }
+
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.9em;
+    font-weight: normal;
+    color: #666;
+  }
+
+  a[href^="#"]::after,
+  a[href^="javascript:"]::after,
+  a[href^="mailto:"]::after {
+    content: "";
+  }
+
+  /* Abbreviations */
+  abbr[title]::after {
+    content: " (" attr(title) ")";
+  }
+
+  /* Images */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  .print-img-full {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  .print-img-half {
+    width: 50% !important;
+    height: auto !important;
+  }
+
+  .print-img-quarter {
+    width: 25% !important;
+    height: auto !important;
+  }
+
+  /* Tables */
+  table {
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    width: 100% !important;
+    margin: 1em 0 !important;
+    break-inside: avoid;
+  }
+
+  th,
+  td {
+    border: 1px solid #000 !important;
+    padding: 0.5em !important;
+    text-align: left !important;
+    vertical-align: top !important;
+  }
+
+  th {
+    font-weight: bold !important;
+    background-color: #f0f0f0 !important;
+  }
+
+  .print-table-borderless th,
+  .print-table-borderless td {
+    border: none !important;
+  }
+
+  .print-table-striped tr:nth-child(even) {
+    background-color: #f9f9f9 !important;
+  }
+
+  /* Code blocks */
+  pre,
+  code {
+    font-family: "Courier New", Courier, monospace !important;
+    background-color: #f5f5f5 !important;
+    border: 1px solid #ddd !important;
+    page-break-inside: avoid;
+  }
+
+  pre {
+    padding: 1em !important;
+    overflow: auto !important;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+  }
+
+  code {
+    padding: 0.2em 0.4em !important;
+  }
+
+  /* Blockquotes */
+  blockquote {
+    border-left: 3px solid #000 !important;
+    margin: 1em 0 !important;
+    padding-left: 1em !important;
+    font-style: italic !important;
+  }
+
+  /* Lists */
+  ul,
+  ol {
+    margin: 1em 0 !important;
+    padding-left: 2em !important;
+  }
+
+  li {
+    margin: 0.5em 0 !important;
+  }
+
+  /* Headings */
+  h1 {
+    font-size: 24pt !important;
+    margin: 1em 0 0.5em 0 !important;
+  }
+
+  h2 {
+    font-size: 18pt !important;
+    margin: 1em 0 0.5em 0 !important;
+  }
+
+  h3 {
+    font-size: 14pt !important;
+    margin: 1em 0 0.5em 0 !important;
+  }
+
+  h4,
+  h5,
+  h6 {
+    font-size: 12pt !important;
+    margin: 1em 0 0.5em 0 !important;
+  }
+
+  /* Paragraphs */
+  p {
+    margin: 1em 0 !important;
+  }
+
+  /* Horizontal rules */
+  hr {
+    border: none !important;
+    border-top: 1px solid #000 !important;
+    margin: 2em 0 !important;
+  }
+
+  /* Forms for print */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="time"],
+  input[type="week"],
+  textarea,
+  select {
+    border: 1px solid #000 !important;
+    background: #fff !important;
+    color: #000 !important;
+    padding: 0.25em !important;
+    font-family: inherit !important;
+    font-size: inherit !important;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    border: 1px solid #000 !important;
+    background: #fff !important;
+    color: #000 !important;
+    width: 1em !important;
+    height: 1em !important;
+    margin-right: 0.25em !important;
+    vertical-align: middle !important;
+  }
+
+  label {
+    font-weight: bold !important;
+    margin-right: 0.5em !important;
+  }
+
+  /* Print-specific utility classes */
+  .print-text-left {
+    text-align: left !important;
+  }
+
+  .print-text-center {
+    text-align: center !important;
+  }
+
+  .print-text-right {
+    text-align: right !important;
+  }
+
+  .print-text-justify {
+    text-align: justify !important;
+  }
+
+  .print-font-normal {
+    font-weight: normal !important;
+  }
+
+  .print-font-bold {
+    font-weight: bold !important;
+  }
+
+  .print-font-italic {
+    font-style: italic !important;
+  }
+
+  .print-font-underline {
+    text-decoration: underline !important;
+  }
+
+  .print-font-strikethrough {
+    text-decoration: line-through !important;
+  }
+
+  .print-uppercase {
+    text-transform: uppercase !important;
+  }
+
+  .print-lowercase {
+    text-transform: lowercase !important;
+  }
+
+  .print-capitalize {
+    text-transform: capitalize !important;
+  }
+
+  .print-no-transform {
+    text-transform: none !important;
+  }
+
+  .print-whitespace-normal {
+    white-space: normal !important;
+  }
+
+  .print-whitespace-nowrap {
+    white-space: nowrap !important;
+  }
+
+  .print-whitespace-pre {
+    white-space: pre !important;
+  }
+
+  .print-whitespace-pre-line {
+    white-space: pre-line !important;
+  }
+
+  .print-whitespace-pre-wrap {
+    white-space: pre-wrap !important;
+  }
+
+  .print-word-break-normal {
+    word-break: normal !important;
+  }
+
+  .print-word-break-all {
+    word-break: break-all !important;
+  }
+
+  .print-word-break-keep {
+    word-break: keep-all !important;
+  }
+
+  .print-word-wrap-normal {
+    word-wrap: normal !important;
+  }
+
+  .print-word-wrap-break {
+    word-wrap: break-word !important;
+  }
+
+  .print-overflow-visible {
+    overflow: visible !important;
+  }
+
+  .print-overflow-hidden {
+    overflow: hidden !important;
+  }
+
+  .print-overflow-scroll {
+    overflow: scroll !important;
+  }
+
+  .print-overflow-auto {
+    overflow: auto !important;
+  }
+
+  .print-overflow-x-visible {
+    overflow-x: visible !important;
+  }
+
+  .print-overflow-x-hidden {
+    overflow-x: hidden !important;
+  }
+
+  .print-overflow-x-scroll {
+    overflow-x: scroll !important;
+  }
+
+  .print-overflow-x-auto {
+    overflow-x: auto !important;
+  }
+
+  .print-overflow-y-visible {
+    overflow-y: visible !important;
+  }
+
+  .print-overflow-y-hidden {
+    overflow-y: hidden !important;
+  }
+
+  .print-overflow-y-scroll {
+    overflow-y: scroll !important;
+  }
+
+  .print-overflow-y-auto {
+    overflow-y: auto !important;
+  }
+
+  /* Page margins */
+  @page {
+    margin: 2cm;
+  }
+
+  @page :first {
+    margin-top: 3cm;
+  }
+
+  @page :left {
+    margin-left: 3cm;
+    margin-right: 2cm;
+  }
+
+  @page :right {
+    margin-left: 2cm;
+    margin-right: 3cm;
+  }
+
+  /* Print header and footer */
+  .print-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3cm;
+    text-align: center;
+    border-bottom: 1px solid #000;
+    background: #fff;
+  }
+
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2cm;
+    text-align: center;
+    border-top: 1px solid #000;
+    background: #fff;
+  }
+
+  .print-footer-page-number::after {
+    content: "Page " counter(page);
+  }
+
+  /* Print columns */
+  .print-columns-2 {
+    column-count: 2;
+    column-gap: 2em;
+  }
+
+  .print-columns-3 {
+    column-count: 3;
+    column-gap: 1.5em;
+  }
+
+  .print-columns-4 {
+    column-count: 4;
+    column-gap: 1em;
+  }
+
+  /* Print visibility */
+  .print-invisible {
+    visibility: hidden !important;
+  }
+
+  .print-visible {
+    visibility: visible !important;
+  }
+
+  /* Print opacity */
+  .print-opacity-0 {
+    opacity: 0 !important;
+  }
+
+  .print-opacity-25 {
+    opacity: 0.25 !important;
+  }
+
+  .print-opacity-50 {
+    opacity: 0.5 !important;
+  }
+
+  .print-opacity-75 {
+    opacity: 0.75 !important;
+  }
+
+  .print-opacity-100 {
+    opacity: 1 !important;
+  }
+
+  /* Print order */
+  .print-order-first {
+    order: -9999 !important;
+  }
+
+  .print-order-last {
+    order: 9999 !important;
+  }
+
+  .print-order-none {
+    order: 0 !important;
+  }
+
+  /* Print layout */
+  .print-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-m-0 {
+    margin: 0 !important;
+  }
+
+  .print-p-0 {
+    padding: 0 !important;
+  }
+
+  .print-w-full {
+    width: 100% !important;
+  }
+
+  .print-h-full {
+    height: 100% !important;
+  }
+
+  /* Print background */
+  .print-bg-white {
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-bg-transparent {
+    background: transparent !important;
+  }
+
+  /* Print borders */
+  .print-border {
+    border: 1px solid #000 !important;
+  }
+
+  .print-border-t {
+    border-top: 1px solid #000 !important;
+  }
+
+  .print-border-r {
+    border-right: 1px solid #000 !important;
+  }
+
+  .print-border-b {
+    border-bottom: 1px solid #000 !important;
+  }
+
+  .print-border-l {
+    border-left: 1px solid #000 !important;
+  }
+
+  .print-border-none {
+    border: none !important;
+  }
+}

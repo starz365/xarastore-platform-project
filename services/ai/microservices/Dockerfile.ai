@@ -1,0 +1,58 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    build-essential \
+    libpq-dev \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY services/ai/requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Install PyTorch CPU version (GPU version if needed)
+RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install additional ML libraries
+RUN pip install --no-cache-dir \
+    scikit-learn \
+    pandas \
+    numpy \
+    scipy \
+    xgboost \
+    lightgbm \
+    catboost \
+    fastapi \
+    uvicorn \
+    redis \
+    asyncpg \
+    supabase \
+    aiofiles \
+    pillow \
+    opencv-python-headless \
+    tensorflow-cpu
+
+# Copy application code
+COPY services/ai/microservices /app
+COPY lib /app/lib
+COPY types /app/types
+
+# Create non-root user
+RUN useradd -m -u 1000 aiuser && \
+    chown -R aiuser:aiuser /app
+
+USER aiuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8001/health || exit 1
+
+EXPOSE 8001-8005
+
+CMD ["python", "main.py"]

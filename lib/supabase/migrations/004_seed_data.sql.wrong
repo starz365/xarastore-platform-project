@@ -1,0 +1,347 @@
+-- Comprehensive Seed Data for Xarastore E-commerce Platform
+-- This file includes categories, brands, products, reviews, collections, and settings
+-- Note: Run this after your schema migrations are complete
+
+-- ============================================================================
+-- CATEGORIES
+-- ============================================================================
+
+INSERT INTO categories (id, slug, name, description, image, icon, sort_order, is_active) VALUES
+-- Main Categories
+('11111111-1111-1111-1111-111111111111', 'electronics', 'Electronics', 'Latest gadgets and electronics', 'https://cdn.xarastore.com/categories/electronics.jpg', '📱', 1, true),
+('22222222-2222-2222-2222-222222222222', 'smartphones', 'Smartphones', 'Latest smartphones and accessories', 'https://cdn.xarastore.com/categories/smartphones.jpg', '📱', 2, true),
+('33333333-3333-3333-3333-333333333333', 'laptops', 'Laptops & Computers', 'Computers, laptops, and accessories', 'https://cdn.xarastore.com/categories/laptops.jpg', '💻', 3, true),
+('44444444-4444-4444-4444-444444444444', 'audio', 'Audio & Headphones', 'Headphones, speakers, and audio equipment', 'https://cdn.xarastore.com/categories/audio.jpg', '🎧', 4, true),
+
+-- Fashion
+('55555555-5555-5555-5555-555555555555', 'fashion', 'Fashion', 'Clothing, shoes, and accessories', 'https://cdn.xarastore.com/categories/fashion.jpg', '👕', 5, true),
+('66666666-6666-6666-6666-666666666666', 'mens-fashion', 'Men''s Fashion', 'Men''s clothing and accessories', 'https://cdn.xarastore.com/categories/mens-fashion.jpg', '👔', 6, true),
+('77777777-7777-7777-7777-777777777777', 'womens-fashion', 'Women''s Fashion', 'Women''s clothing and accessories', 'https://cdn.xarastore.com/categories/womens-fashion.jpg', '👗', 7, true),
+('88888888-8888-8888-8888-888888888888', 'shoes', 'Shoes & Footwear', 'All types of footwear', 'https://cdn.xarastore.com/categories/shoes.jpg', '👟', 8, true),
+
+-- Home & Living
+('99999999-9999-9999-9999-999999999999', 'home-living', 'Home & Living', 'Home appliances and living essentials', 'https://cdn.xarastore.com/categories/home-living.jpg', '🏠', 9, true),
+('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'kitchen', 'Kitchen & Dining', 'Kitchen appliances and diningware', 'https://cdn.xarastore.com/categories/kitchen.jpg', '🍽️', 10, true),
+('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'furniture', 'Furniture', 'Home and office furniture', 'https://cdn.xarastore.com/categories/furniture.jpg', '🛋️', 11, true),
+
+-- Beauty & Health
+('cccccccc-cccc-cccc-cccc-cccccccccccc', 'beauty-health', 'Beauty & Health', 'Cosmetics, skincare, and health products', 'https://cdn.xarastore.com/categories/beauty-health.jpg', '💄', 12, true),
+('dddddddd-dddd-dddd-dddd-dddddddddddd', 'skincare', 'Skincare', 'Face and body skincare products', 'https://cdn.xarastore.com/categories/skincare.jpg', '🧴', 13, true),
+('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'makeup', 'Makeup', 'Cosmetics and makeup products', 'https://cdn.xarastore.com/categories/makeup.jpg', '💋', 14, true),
+
+-- Sports & Outdoors
+('ffffffff-ffff-ffff-ffff-ffffffffffff', 'sports-outdoors', 'Sports & Outdoors', 'Sports equipment and outdoor gear', 'https://cdn.xarastore.com/categories/sports-outdoors.jpg', '⚽', 15, true),
+('12345678-1234-1234-1234-123456789012', 'fitness', 'Fitness Equipment', 'Exercise and fitness equipment', 'https://cdn.xarastore.com/categories/fitness.jpg', '🏋️', 16, true),
+('23456789-2345-2345-2345-234567890123', 'outdoor', 'Outdoor Gear', 'Camping and outdoor equipment', 'https://cdn.xarastore.com/categories/outdoor.jpg', '🏕️', 17, true),
+
+-- Automotive
+('34567890-3456-3456-3456-345678901234', 'automotive', 'Automotive', 'Car accessories and automotive parts', 'https://cdn.xarastore.com/categories/automotive.jpg', '🚗', 18, true),
+('45678901-4567-4567-4567-456789012345', 'car-accessories', 'Car Accessories', 'Car interior and exterior accessories', 'https://cdn.xarastore.com/categories/car-accessories.jpg', '🚙', 19, true),
+
+-- Groceries
+('56789012-5678-5678-5678-567890123456', 'groceries', 'Groceries', 'Food and household essentials', 'https://cdn.xarastore.com/categories/groceries.jpg', '🛒', 20, true),
+('67890123-6789-6789-6789-678901234567', 'beverages', 'Beverages', 'Drinks and beverages', 'https://cdn.xarastore.com/categories/beverages.jpg', '🥤', 21, true),
+
+-- Books & Entertainment
+('78901234-7890-7890-7890-789012345678', 'books-stationery', 'Books & Stationery', 'Books, office supplies, and stationery', 'https://cdn.xarastore.com/categories/books-stationery.jpg', '📚', 22, true),
+('89012345-8901-8901-8901-890123456789', 'toys-games', 'Toys & Games', 'Toys, games, and entertainment', 'https://cdn.xarastore.com/categories/toys-games.jpg', '🎮', 23, true)
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    image = EXCLUDED.image,
+    icon = EXCLUDED.icon,
+    sort_order = EXCLUDED.sort_order,
+    is_active = EXCLUDED.is_active;
+
+-- Update parent-child relationships
+UPDATE categories SET parent_id = '11111111-1111-1111-1111-111111111111' WHERE slug IN ('smartphones', 'laptops', 'audio');
+UPDATE categories SET parent_id = '55555555-5555-5555-5555-555555555555' WHERE slug IN ('mens-fashion', 'womens-fashion', 'shoes');
+UPDATE categories SET parent_id = '99999999-9999-9999-9999-999999999999' WHERE slug IN ('kitchen', 'furniture');
+UPDATE categories SET parent_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc' WHERE slug IN ('skincare', 'makeup');
+UPDATE categories SET parent_id = 'ffffffff-ffff-ffff-ffff-ffffffffffff' WHERE slug IN ('fitness', 'outdoor');
+UPDATE categories SET parent_id = '34567890-3456-3456-3456-345678901234' WHERE slug = 'car-accessories';
+UPDATE categories SET parent_id = '56789012-5678-5678-5678-567890123456' WHERE slug = 'beverages';
+
+-- ============================================================================
+-- BRANDS
+-- ============================================================================
+
+INSERT INTO brands (id, slug, name, description, logo, website, is_active) VALUES
+-- Electronics brands
+('11111111-1111-1111-1111-111111111111', 'apple', 'Apple', 'Premium electronics and technology', 'https://cdn.xarastore.com/brands/apple.png', 'https://apple.com', true),
+('22222222-2222-2222-2222-222222222222', 'samsung', 'Samsung', 'Innovative electronics and appliances', 'https://cdn.xarastore.com/brands/samsung.png', 'https://samsung.com', true),
+('33333333-3333-3333-3333-333333333333', 'sony', 'Sony', 'Entertainment and electronics', 'https://cdn.xarastore.com/brands/sony.png', 'https://sony.com', true),
+('44444444-4444-4444-4444-444444444444', 'hp', 'HP', 'Computers and printers', 'https://cdn.xarastore.com/brands/hp.png', 'https://hp.com', true),
+('55555555-5555-5555-5555-555555555555', 'dell', 'Dell', 'Computers and technology solutions', 'https://cdn.xarastore.com/brands/dell.png', 'https://dell.com', true),
+('d1111111-1111-1111-1111-111111111111', 'lenovo', 'Lenovo', 'Computing and technology solutions', 'https://cdn.xarastore.com/brands/lenovo.png', 'https://lenovo.com', true),
+('d2222222-2222-2222-2222-222222222222', 'bose', 'Bose', 'Premium audio equipment', 'https://cdn.xarastore.com/brands/bose.png', 'https://bose.com', true),
+('d3333333-3333-3333-3333-333333333333', 'jbl', 'JBL', 'Audio and sound systems', 'https://cdn.xarastore.com/brands/jbl.png', 'https://jbl.com', true),
+
+-- Fashion brands
+('66666666-6666-6666-6666-666666666666', 'nike', 'Nike', 'Athletic apparel and footwear', 'https://cdn.xarastore.com/brands/nike.png', 'https://nike.com', true),
+('77777777-7777-7777-7777-777777777777', 'adidas', 'Adidas', 'Sports apparel and footwear', 'https://cdn.xarastore.com/brands/adidas.png', 'https://adidas.com', true),
+('88888888-8888-8888-8888-888888888888', 'zara', 'Zara', 'Fashion clothing and accessories', 'https://cdn.xarastore.com/brands/zara.png', 'https://zara.com', true),
+('99999999-9999-9999-9999-999999999999', 'hugo-boss', 'Hugo Boss', 'Premium fashion and fragrances', 'https://cdn.xarastore.com/brands/hugo-boss.png', 'https://hugoboss.com', true),
+('d4444444-4444-4444-4444-444444444444', 'levis', 'Levi''s', 'Denim and casual wear', 'https://cdn.xarastore.com/brands/levis.png', 'https://levis.com', true),
+('d5555555-5555-5555-5555-555555555555', 'hm', 'H&M', 'Fashion and quality at the best price', 'https://cdn.xarastore.com/brands/hm.png', 'https://hm.com', true),
+
+-- Home brands
+('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'ikea', 'IKEA', 'Affordable home furniture and accessories', 'https://cdn.xarastore.com/brands/ikea.png', 'https://ikea.com', true),
+('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'kitchenaid', 'KitchenAid', 'Premium kitchen appliances', 'https://cdn.xarastore.com/brands/kitchenaid.png', 'https://kitchenaid.com', true),
+('d6666666-6666-6666-6666-666666666666', 'philips', 'Philips', 'Home appliances and electronics', 'https://cdn.xarastore.com/brands/philips.png', 'https://philips.com', true),
+
+-- Beauty brands
+('cccccccc-cccc-cccc-cccc-cccccccccccc', 'loreal', 'L''Oréal', 'Beauty and cosmetics', 'https://cdn.xarastore.com/brands/loreal.png', 'https://loreal.com', true),
+('dddddddd-dddd-dddd-dddd-dddddddddddd', 'estee-lauder', 'Estée Lauder', 'Luxury skincare and makeup', 'https://cdn.xarastore.com/brands/estee-lauder.png', 'https://esteelauder.com', true),
+('d7777777-7777-7777-7777-777777777777', 'nivea', 'Nivea', 'Skincare and body care', 'https://cdn.xarastore.com/brands/nivea.png', 'https://nivea.com', true),
+
+-- Local Kenyan brands
+('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'kingsway', 'Kingsway', 'Kenyan fashion and textiles', 'https://cdn.xarastore.com/brands/kingsway.png', 'https://kingsway.co.ke', true),
+('ffffffff-ffff-ffff-ffff-ffffffffffff', 'nakumatt', 'Nakumatt', 'Kenyan retail chain', 'https://cdn.xarastore.com/brands/nakumatt.png', 'https://nakumatt.com', true),
+('12345678-1234-1234-1234-123456789012', 'safaricom', 'Safaricom', 'Kenyan telecommunications', 'https://cdn.xarastore.com/brands/safaricom.png', 'https://safaricom.co.ke', true),
+
+-- Sports brands
+('23456789-2345-2345-2345-234567890123', 'puma', 'Puma', 'Sports apparel and footwear', 'https://cdn.xarastore.com/brands/puma.png', 'https://puma.com', true),
+('34567890-3456-3456-3456-345678901234', 'under-armour', 'Under Armour', 'Performance athletic wear', 'https://cdn.xarastore.com/brands/under-armour.png', 'https://underarmour.com', true),
+
+-- Automotive brands
+('45678901-4567-4567-4567-456789012345', 'bosch', 'Bosch', 'Automotive parts and tools', 'https://cdn.xarastore.com/brands/bosch.png', 'https://bosch.com', true),
+('56789012-5678-5678-5678-567890123456', 'michelin', 'Michelin', 'Tires and automotive products', 'https://cdn.xarastore.com/brands/michelin.png', 'https://michelin.com', true)
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    logo = EXCLUDED.logo,
+    website = EXCLUDED.website,
+    is_active = EXCLUDED.is_active;
+
+-- ============================================================================
+-- PRODUCTS - Electronics
+-- ============================================================================
+
+INSERT INTO products (id, slug, name, description, price, compare_at_price, cost, category_id, brand_id, sku, barcode, stock_quantity, low_stock_threshold, images, is_active, is_featured, rating, review_count, tags, meta_title, meta_description) VALUES
+
+-- Smartphones
+('p1111111-1111-1111-1111-111111111111', 'iphone-15-pro-max-256gb', 'iPhone 15 Pro Max 256GB', 'Latest iPhone with A17 Pro chip, titanium design, and advanced camera system. Features 6.7-inch Super Retina XDR display, ProMotion technology, and all-day battery life.', 189999, 199999, 145000, '22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'APL-IP15PM-256', '194253149514', 45, 10, '["https://cdn.xarastore.com/products/iphone-15-pro-max-1.jpg", "https://cdn.xarastore.com/products/iphone-15-pro-max-2.jpg", "https://cdn.xarastore.com/products/iphone-15-pro-max-3.jpg", "https://cdn.xarastore.com/products/iphone-15-pro-max-4.jpg"]', true, true, 4.8, 156, '["smartphone", "apple", "iphone", "5g", "flagship"]', 'iPhone 15 Pro Max 256GB - Buy Online at Best Price | Xarastore', 'Get the latest iPhone 15 Pro Max with 256GB storage. Features A17 Pro chip, titanium design, and professional camera system. Free delivery in Nairobi.'),
+
+('p1111112-1111-1111-1111-111111111111', 'samsung-galaxy-s24-ultra', 'Samsung Galaxy S24 Ultra 512GB', 'Premium Samsung flagship with S Pen, 200MP camera, and AI features. 6.8-inch Dynamic AMOLED display with 120Hz refresh rate.', 164999, 174999, 125000, '22222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 'SAM-S24U-512', '887276794822', 38, 10, '["https://cdn.xarastore.com/products/galaxy-s24-ultra-1.jpg", "https://cdn.xarastore.com/products/galaxy-s24-ultra-2.jpg", "https://cdn.xarastore.com/products/galaxy-s24-ultra-3.jpg"]', true, true, 4.7, 142, '["smartphone", "samsung", "android", "5g", "s-pen"]', 'Samsung Galaxy S24 Ultra 512GB - Latest Flagship | Xarastore', 'Samsung Galaxy S24 Ultra with 512GB storage, S Pen, and 200MP camera. Experience Galaxy AI and premium performance.'),
+
+('p1111113-1111-1111-1111-111111111111', 'google-pixel-8-pro', 'Google Pixel 8 Pro 256GB', 'Google''s flagship phone with AI-powered photography and pure Android experience. Features Tensor G3 chip and 6.7-inch LTPO OLED display.', 124999, 134999, 95000, '22222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 'GOO-PIX8P-256', '840244702359', 28, 10, '["https://cdn.xarastore.com/products/pixel-8-pro-1.jpg", "https://cdn.xarastore.com/products/pixel-8-pro-2.jpg"]', true, true, 4.6, 89, '["smartphone", "google", "pixel", "android", "ai-camera"]', 'Google Pixel 8 Pro 256GB - AI Photography | Xarastore', 'Get the Google Pixel 8 Pro with advanced AI features and the best Android camera. Pure Android experience with 7 years of updates.'),
+
+('p1111114-1111-1111-1111-111111111111', 'xiaomi-14-ultra', 'Xiaomi 14 Ultra 512GB', 'Photography powerhouse with Leica optics and Snapdragon 8 Gen 3. Features 6.73-inch AMOLED display and 5000mAh battery with 90W charging.', 109999, 119999, 85000, '22222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 'XIA-14U-512', '6941812761953', 32, 10, '["https://cdn.xarastore.com/products/xiaomi-14-ultra-1.jpg", "https://cdn.xarastore.com/products/xiaomi-14-ultra-2.jpg"]', true, false, 4.5, 67, '["smartphone", "xiaomi", "leica", "photography", "flagship"]', 'Xiaomi 14 Ultra 512GB - Leica Camera System | Xarastore', 'Xiaomi 14 Ultra with Leica quad camera system and Snapdragon 8 Gen 3. Professional photography in your pocket.'),
+
+-- Laptops
+('p2222221-2222-2222-2222-222222222222', 'macbook-pro-16-m3-max', 'MacBook Pro 16" M3 Max 36GB/1TB', 'Ultimate MacBook Pro with M3 Max chip, 16-inch Liquid Retina XDR display. Perfect for professionals and creators.', 389999, 409999, 295000, '33333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111', 'APL-MBP16-M3MAX', '195949038051', 15, 5, '["https://cdn.xarastore.com/products/macbook-pro-16-1.jpg", "https://cdn.xarastore.com/products/macbook-pro-16-2.jpg", "https://cdn.xarastore.com/products/macbook-pro-16-3.jpg"]', true, true, 4.9, 94, '["laptop", "apple", "macbook", "m3-max", "professional"]', 'MacBook Pro 16" M3 Max - Premium Performance | Xarastore', 'Get the powerful MacBook Pro 16" with M3 Max chip. Perfect for video editing, 3D rendering, and professional work.'),
+
+('p2222222-2222-2222-2222-222222222222', 'dell-xps-15-i9-rtx4060', 'Dell XPS 15 (2024) - i9, RTX 4060, 32GB', 'Premium Windows laptop with Intel Core i9, NVIDIA RTX 4060, and stunning 15.6" OLED display. Built for creators and professionals.', 284999, 299999, 215000, '33333333-3333-3333-3333-333333333333', '55555555-5555-5555-5555-555555555555', 'DEL-XPS15-I9', '884116438847', 22, 5, '["https://cdn.xarastore.com/products/dell-xps-15-1.jpg", "https://cdn.xarastore.com/products/dell-xps-15-2.jpg"]', true, true, 4.7, 78, '["laptop", "dell", "xps", "gaming", "creator"]', 'Dell XPS 15 i9 RTX 4060 - Creator Laptop | Xarastore', 'Dell XPS 15 with Core i9, RTX 4060 graphics, and OLED display. Perfect for content creation and gaming.'),
+
+('p2222223-2222-2222-2222-222222222222', 'hp-spectre-x360-14', 'HP Spectre x360 14" - i7, 16GB, 1TB SSD', 'Premium 2-in-1 convertible laptop with 13.5" 3K2K OLED touchscreen. Elegant design with powerful performance.', 164999, 174999, 125000, '33333333-3333-3333-3333-333333333333', '44444444-4444-4444-4444-444444444444', 'HP-SPX360-14', '196068364953', 18, 5, '["https://cdn.xarastore.com/products/hp-spectre-1.jpg", "https://cdn.xarastore.com/products/hp-spectre-2.jpg"]', true, false, 4.6, 56, '["laptop", "hp", "2-in-1", "convertible", "touchscreen"]', 'HP Spectre x360 14" - Premium 2-in-1 Laptop | Xarastore', 'HP Spectre x360 with OLED touchscreen and Core i7 processor. Versatile 2-in-1 design for work and creativity.'),
+
+('p2222224-2222-2222-2222-222222222222', 'lenovo-thinkpad-x1-carbon-gen-11', 'Lenovo ThinkPad X1 Carbon Gen 11 - i7, 32GB', 'Business ultrabook with legendary keyboard, 14" 2.8K OLED display, and military-grade durability. Weighs only 1.12kg.', 214999, 229999, 165000, '33333333-3333-3333-3333-333333333333', 'd1111111-1111-1111-1111-111111111111', 'LEN-X1C-G11', '197530874932', 25, 5, '["https://cdn.xarastore.com/products/thinkpad-x1-1.jpg", "https://cdn.xarastore.com/products/thinkpad-x1-2.jpg"]', true, true, 4.8, 112, '["laptop", "lenovo", "thinkpad", "business", "ultrabook"]', 'Lenovo ThinkPad X1 Carbon Gen 11 - Business Laptop | Xarastore', 'ThinkPad X1 Carbon Gen 11 with Core i7 and OLED display. Premium business laptop with legendary durability.'),
+
+-- Audio
+('p3333331-3333-3333-3333-333333333333', 'sony-wh-1000xm5', 'Sony WH-1000XM5 Wireless Headphones', 'Industry-leading noise cancellation with premium sound quality. 30-hour battery life and multi-point connectivity.', 44999, 49999, 32000, '44444444-4444-4444-4444-444444444444', '33333333-3333-3333-3333-333333333333', 'SON-WH1000XM5', '4548736141155', 85, 15, '["https://cdn.xarastore.com/products/sony-wh1000xm5-1.jpg", "https://cdn.xarastore.com/products/sony-wh1000xm5-2.jpg", "https://cdn.xarastore.com/products/sony-wh1000xm5-3.jpg"]', true, true, 4.8, 342, '["headphones", "sony", "noise-cancelling", "wireless", "premium"]', 'Sony WH-1000XM5 - Best Noise Cancelling Headphones | Xarastore', 'Sony WH-1000XM5 with industry-leading noise cancellation. Premium wireless headphones with 30-hour battery life.'),
+
+('p3333332-3333-3333-3333-333333333333', 'airpods-pro-2nd-gen-usbc', 'Apple AirPods Pro (2nd Gen) USB-C', 'Active Noise Cancellation, Adaptive Audio, and Personalized Spatial Audio. Now with USB-C charging case.', 34999, 37999, 26000, '44444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', 'APL-APP2-USBC', '195949048739', 120, 20, '["https://cdn.xarastore.com/products/airpods-pro-2-1.jpg", "https://cdn.xarastore.com/products/airpods-pro-2-2.jpg"]', true, true, 4.7, 289, '["earbuds", "apple", "airpods", "noise-cancelling", "wireless"]', 'AirPods Pro 2nd Gen USB-C - Apple | Xarastore', 'AirPods Pro (2nd generation) with USB-C. Active Noise Cancellation and Adaptive Audio for the perfect fit.'),
+
+('p3333333-3333-3333-3333-333333333333', 'bose-quietcomfort-ultra', 'Bose QuietComfort Ultra Headphones', 'Legendary noise cancellation meets breakthrough spatialized audio. Premium comfort for all-day listening.', 49999, 54999, 37000, '44444444-4444-4444-4444-444444444444', 'd2222222-2222-2222-2222-222222222222', 'BOS-QCULT', '017817845991', 42, 10, '["https://cdn.xarastore.com/products/bose-qc-ultra-1.jpg", "https://cdn.xarastore.com/products/bose-qc-ultra-2.jpg"]', true, true, 4.7, 156, '["headphones", "bose", "noise-cancelling", "premium", "spatial-audio"]', 'Bose QuietComfort Ultra - Premium Headphones | Xarastore', 'Bose QuietComfort Ultra with world-class noise cancellation and immersive spatial audio. Premium comfort guaranteed.'),
+
+('p3333334-3333-3333-3333-333333333333', 'jbl-flip-6-bluetooth-speaker', 'JBL Flip 6 Portable Bluetooth Speaker', 'Powerful sound with deep bass, IP67 waterproof rating, and 12 hours of playtime. Perfect for outdoor adventures.', 14999, 16999, 11000, '44444444-4444-4444-4444-444444444444', 'd3333333-3333-3333-3333-333333333333', 'JBL-FLIP6', '050036385596', 95, 20, '["https://cdn.xarastore.com/products/jbl-flip-6-1.jpg", "https://cdn.xarastore.com/products/jbl-flip-6-2.jpg"]', true, false, 4.6, 234, '["speaker", "jbl", "bluetooth", "waterproof", "portable"]', 'JBL Flip 6 Bluetooth Speaker - Waterproof | Xarastore', 'JBL Flip 6 portable speaker with powerful bass and IP67 waterproof rating. 12 hours of playtime for outdoor fun.'),
+
+-- ============================================================================
+-- PRODUCTS - Fashion
+-- ============================================================================
+
+-- Men's Fashion
+('p4444441-4444-4444-4444-444444444444', 'nike-air-max-90', 'Nike Air Max 90 - Black/White', 'Iconic Nike Air Max 90 with visible Air cushioning and classic design. Premium leather and mesh upper for comfort and style.', 14999, 17999, 11000, '66666666-6666-6666-6666-666666666666', '66666666-6666-6666-6666-666666666666', 'NIK-AM90-BW', '196604443241', 68, 15, '["https://cdn.xarastore.com/products/nike-air-max-90-1.jpg", "https://cdn.xarastore.com/products/nike-air-max-90-2.jpg", "https://cdn.xarastore.com/products/nike-air-max-90-3.jpg"]', true, true, 4.7, 189, '["shoes", "nike", "sneakers", "air-max", "mens"]', 'Nike Air Max 90 Black/White - Iconic Sneakers | Xarastore', 'Classic Nike Air Max 90 in Black/White colorway. Visible Air cushioning and premium materials for all-day comfort.'),
+
+('p4444442-4444-4444-4444-444444444444', 'adidas-ultraboost-22', 'Adidas Ultraboost 22 Running Shoes', 'Revolutionary running shoes with Boost cushioning and Primeknit upper. Designed for comfort and performance on every run.', 18999, 21999, 14000, '66666666-6666-6666-6666-666666666666', '77777777-7777-7777-7777-777777777777', 'ADI-UB22', '4066759318557', 54, 15, '["https://cdn.xarastore.com/products/ultraboost-22-1.jpg", "https://cdn.xarastore.com/products/ultraboost-22-2.jpg"]', true, true, 4.8, 267, '["shoes", "adidas", "running", "ultraboost", "mens"]', 'Adidas Ultraboost 22 - Premium Running Shoes | Xarastore', 'Adidas Ultraboost 22 with responsive Boost cushioning. Perfect for runners seeking comfort and performance.'),
+
+('p4444443-4444-4444-4444-444444444444', 'levis-501-original-jeans', 'Levi''s 501 Original Fit Jeans - Dark Blue', 'The original jean since 1873. Classic straight fit with button fly, crafted from 100% cotton denim for authentic style.', 7999, 9999, 5500, '66666666-6666-6666-6666-666666666666', 'd4444444-4444-4444-4444-444444444444', 'LEV-501-DB', '5400598471141', 145, 25, '["https://cdn.xarastore.com/products/levis-501-1.jpg", "https://cdn.xarastore.com/products/levis-501-2.jpg"]', true, false, 4.6, 423, '["jeans", "levis", "denim", "mens", "classic"]', 'Levi''s 501 Original Fit Jeans - Dark Blue | Xarastore', 'Classic Levi''s 501 jeans in dark blue. The original jean with straight fit and timeless style since 1873.'),
+
+('p4444444-4444-4444-4444-444444444444', 'hugo-boss-slim-fit-shirt', 'Hugo Boss Slim Fit Business Shirt - White', 'Premium cotton business shirt with modern slim fit. Perfect for professional settings with sophisticated Hugo Boss styling.', 12999, 15999, 9500, '66666666-6666-6666-6666-666666666666', '99999999-9999-9999-9999-999999999999', 'HGB-SFS-WH', '4063538166750', 72, 15, '["https://cdn.xarastore.com/products/boss-shirt-1.jpg", "https://cdn.xarastore.com/products/boss-shirt-2.jpg"]', true, false, 4.5, 98, '["shirt", "hugo-boss", "business", "mens", "formal"]', 'Hugo Boss Slim Fit Shirt White - Business | Xarastore', 'Premium Hugo Boss business shirt with slim fit. Perfect for professional style with premium cotton fabric.'),
+
+-- Women's Fashion
+('p5555551-5555-5555-5555-555555555555', 'zara-floral-midi-dress', 'Zara Floral Print Midi Dress', 'Elegant midi dress with romantic floral print. Features wrap-style design and adjustable tie waist. Perfect for any occasion.', 5999, 7999, 4200, '77777777-7777-7777-7777-777777777777', '88888888-8888-8888-8888-888888888888', 'ZAR-FMD', '8434619483026', 89, 20, '["https://cdn.xarastore.com/products/zara-dress-1.jpg", "https://cdn.xarastore.com/products/zara-dress-2.jpg", "https://cdn.xarastore.com/products/zara-dress-3.jpg"]', true, true, 4.6, 156, '["dress", "zara", "floral", "womens", "midi"]', 'Zara Floral Midi Dress - Elegant & Stylish | Xarastore', 'Beautiful Zara floral midi dress with wrap design. Perfect for casual outings or special occasions.'),
+
+('p5555552-5555-5555-5555-555555555555', 'hm-skinny-fit-jeans', 'H&M Skinny Fit High Waisted Jeans', 'Comfortable stretch denim jeans with skinny fit and high waist. Classic 5-pocket styling in versatile dark wash.', 3999, 4999, 2800, '77777777-7777-7777-7777-777777777777', 'd5555555-5555-5555-5555-555555555555', 'HM-SFJ-DW', '0745062993345', 124, 25, '["https://cdn.xarastore.com/products/hm-jeans-1.jpg", "https://cdn.xarastore.com/products/hm-jeans-2.jpg"]', true, false, 4.5, 289, '["jeans", "hm", "skinny", "womens", "denim"]', 'H&M Skinny Fit High Waisted Jeans | Xarastore', 'Comfortable H&M skinny jeans with high waist and stretch denim. Perfect everyday style at great value.'),
+
+-- ============================================================================
+-- PRODUCTS - Home & Living
+-- ============================================================================
+
+('p6666661-6666-6666-6666-666666666666', 'kitchenaid-artisan-stand-mixer', 'KitchenAid Artisan Stand Mixer 4.8L', 'Iconic stand mixer with 4.8L stainless steel bowl. 10 speeds and includes whisk, dough hook, and flat beater attachments.', 54999, 59999, 42000, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'KA-ART-48', '883049537177', 28, 5, '["https://cdn.xarastore.com/products/kitchenaid-mixer-1.jpg", "https://cdn.xarastore.com/products/kitchenaid-mixer-2.jpg", "https://cdn.xarastore.com/products/kitchenaid-mixer-3.jpg"]', true, true, 4.9, 187, '["kitchen", "kitchenaid", "mixer", "appliance", "baking"]', 'KitchenAid Artisan Stand Mixer 4.8L | Xarastore', 'Premium KitchenAid Artisan Stand Mixer with 4.8L capacity. Perfect for baking enthusiasts and home chefs.'),
+
+('p6666662-6666-6666-6666-666666666666', 'philips-air-fryer-xxl', 'Philips Air Fryer XXL - 7.3L Family Size', 'Extra-large air fryer for healthier cooking. Cook for up to 6 people with 90% less fat. Digital touchscreen with 7 presets.', 32999, 36999, 25000, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'd6666666-6666-6666-6666-666666666666', 'PHI-AF-XXL', '8710103900474', 45, 10, '["https://cdn.xarastore.com/products/philips-airfryer-1.jpg", "https://cdn.xarastore.com/products/philips-airfryer-2.jpg"]', true, true, 4.7, 312, '["kitchen", "philips", "air-fryer", "appliance", "cooking"]', 'Philips Air Fryer XXL 7.3L - Healthy Cooking | Xarastore', 'Family-size Philips Air Fryer XXL with 7.3L capacity. Cook healthier meals with up to 90% less fat.'),
+
+('p6666663-6666-6666-6666-666666666666', 'ikea-hemnes-tv-bench', 'IKEA Hemnes TV Bench - White Stain', 'Solid wood TV bench with classic design. Features two drawers and open compartments for media devices. Supports TVs up to 72".', 24999, 27999, 18000, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'IKE-HEM-TVB', '304.940.41', 18, 5, '["https://cdn.xarastore.com/products/ikea-hemnes-1.jpg", "https://cdn.xarastore.com/products/ikea-hemnes-2.jpg"]', true, false, 4.6, 94, '["furniture", "ikea", "tv-bench", "living-room", "storage"]', 'IKEA Hemnes TV Bench White - Living Room | Xarastore', 'Classic IKEA Hemnes TV bench in white stain. Solid wood construction with storage for media devices.'),
+
+-- ============================================================================
+-- PRODUCTS - Beauty & Health
+-- ============================================================================
+
+('p7777771-7777-7777-7777-777777777777', 'loreal-revitalift-serum', 'L''Oréal Revitalift 1.5% Hyaluronic Acid Serum', 'Anti-aging face serum with pure hyaluronic acid. Visibly reduces wrinkles and plumps skin for a youthful glow.', 2499, 2999, 1800, 'dddddddd-dddd-dddd-dddd-dddddddddddd', 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'LOR-REV-HA', '3600523785346', 156, 30, '["https://cdn.xarastore.com/products/loreal-serum-1.jpg", "https://cdn.xarastore.com/products/loreal-serum-2.jpg"]', true, true, 4.5, 567, '["skincare", "loreal", "serum", "anti-aging", "hyaluronic-acid"]', 'L''Oréal Revitalift Hyaluronic Acid Serum | Xarastore', 'Anti-aging L''Oréal serum with 1.5% pure hyaluronic acid. Reduces wrinkles and plumps skin naturally.'),
+
+('p7777772-7777-7777-7777-777777777777', 'estee-lauder-advanced-night-repair', 'Estée Lauder Advanced Night Repair Serum 50ml', 'Luxury anti-aging night serum that repairs and renews skin overnight. Reduces visible signs of aging with patented technology.', 12999, 14999, 9500, 'dddddddd-dddd-dddd-dddd-dddddddddddd', 'dddddddd-dddd-dddd-dddd-dddddddddddd', 'EST-ANR-50', '887167486485', 67, 15, '["https://cdn.xarastore.com/products/estee-night-repair-1.jpg", "https://cdn.xarastore.com/products/estee-night-repair-2.jpg"]', true, true, 4.8, 423, '["skincare", "estee-lauder", "serum", "anti-aging", "luxury"]', 'Estée Lauder Advanced Night Repair Serum | Xarastore', 'Luxury Estée Lauder night repair serum. Reduces wrinkles and renews skin with proven anti-aging technology.'),
+
+('p7777773-7777-7777-7777-777777777777', 'nivea-soft-moisturizing-cream', 'Nivea Soft Moisturizing Cream 300ml', 'Light, moisturizing cream with Vitamin E and Jojoba Oil. Absorbs quickly for soft, smooth skin. Suitable for face, body, and hands.', 899, 1199, 650, 'dddddddd-dddd-dddd-dddd-dddddddddddd', 'd7777777-7777-7777-7777-777777777777', 'NIV-SOFT-300', '4005900136169', 245, 40, '["https://cdn.xarastore.com/products/nivea-soft-1.jpg", "https://cdn.xarastore.com/products/nivea-soft-2.jpg"]', true, false, 4.6, 1289, '["skincare", "nivea", "moisturizer", "body-care", "affordable"]', 'Nivea Soft Moisturizing Cream 300ml | Xarastore', 'Nivea Soft moisturizing cream with Vitamin E. Light formula for face, body, and hands. Great value size.'),
+
+-- ============================================================================
+-- PRODUCTS - Sports & Fitness
+-- ============================================================================
+
+('p8888881-8888-8888-8888-888888888888', 'yoga-mat-premium-6mm', 'Premium Yoga Mat 6mm - Non-Slip Exercise Mat', 'High-density NBR foam yoga mat with excellent cushioning and grip. Includes carrying strap. Perfect for yoga, pilates, and fitness.', 2999, 3999, 2100, '12345678-1234-1234-1234-123456789012', '77777777-7777-7777-7777-777777777777', 'YOG-MAT-6MM', '8934567123456', 128, 25, '["https://cdn.xarastore.com/products/yoga-mat-1.jpg", "https://cdn.xarastore.com/products/yoga-mat-2.jpg"]', true, false, 4.5, 234, '["fitness", "yoga", "mat", "exercise", "home-workout"]', 'Premium Yoga Mat 6mm - Non-Slip Exercise | Xarastore', 'Premium 6mm yoga mat with non-slip surface and carrying strap. Perfect for yoga and home workouts.'),
+
+('p8888882-8888-8888-8888-888888888888', 'adjustable-dumbbells-20kg-set', 'Adjustable Dumbbells Set - 2x20kg', 'Space-saving adjustable dumbbell set. Each dumbbell adjusts from 2kg to 20kg with quick-change dial. Includes storage stand.', 24999, 29999, 18000, '12345678-1234-1234-1234-123456789012', '34567890-3456-3456-3456-345678901234', 'ADJ-DB-20KG', '7456123987456', 35, 8, '["https://cdn.xarastore.com/products/adjustable-dumbbells-1.jpg", "https://cdn.xarastore.com/products/adjustable-dumbbells-2.jpg", "https://cdn.xarastore.com/products/adjustable-dumbbells-3.jpg"]', true, true, 4.7, 156, '["fitness", "dumbbells", "weights", "home-gym", "strength"]', 'Adjustable Dumbbells 20kg Set - Home Gym | Xarastore', 'Space-saving adjustable dumbbells set. Each dumbbell 2-20kg with quick-change system. Perfect for home gym.'),
+
+-- ============================================================================
+-- COLLECTIONS
+-- ============================================================================
+
+INSERT INTO collections (id, slug, name, description, image, banner_image, is_active, sort_order, products) VALUES
+('11111111-1111-1111-1111-111111111111', 'flash-sales', 'Flash Sales', 'Limited time offers with huge discounts - up to 50% off on selected items!', 'https://cdn.xarastore.com/collections/flash-sales.jpg', 'https://cdn.xarastore.com/banners/flash-sales.jpg', true, 1, '["p1111111-1111-1111-1111-111111111111", "p3333331-3333-3333-3333-333333333333", "p4444441-4444-4444-4444-444444444444"]'),
+
+('22222222-2222-2222-2222-222222222222', 'new-arrivals', 'New Arrivals', 'Latest products just added to our store. Be the first to get them!', 'https://cdn.xarastore.com/collections/new-arrivals.jpg', 'https://cdn.xarastore.com/banners/new-arrivals.jpg', true, 2, '["p1111113-1111-1111-1111-111111111111", "p2222221-2222-2222-2222-222222222222", "p7777772-7777-7777-7777-777777777777"]'),
+
+('33333333-3333-3333-3333-333333333333', 'best-sellers', 'Best Sellers', 'Our most popular products loved by thousands of customers', 'https://cdn.xarastore.com/collections/best-sellers.jpg', 'https://cdn.xarastore.com/banners/best-sellers.jpg', true, 3, '["p1111111-1111-1111-1111-111111111111", "p3333332-3333-3333-3333-333333333333", "p6666661-6666-6666-6666-666666666666"]'),
+
+('44444444-4444-4444-4444-444444444444', 'trending-now', 'Trending Now', 'Products everyone is talking about and buying right now', 'https://cdn.xarastore.com/collections/trending-now.jpg', 'https://cdn.xarastore.com/banners/trending-now.jpg', true, 4, '["p1111112-1111-1111-1111-111111111111", "p4444442-4444-4444-4444-444444444444", "p6666662-6666-6666-6666-666666666666"]'),
+
+('55555555-5555-5555-5555-555555555555', 'under-5000', 'Under 5000 KES', 'Great quality products at affordable prices - all under KES 5,000', 'https://cdn.xarastore.com/collections/under-5000.jpg', 'https://cdn.xarastore.com/banners/under-5000.jpg', true, 5, '["p3333334-3333-3333-3333-333333333333", "p4444443-4444-4444-4444-444444444444", "p5555552-5555-5555-5555-555555555555", "p7777773-7777-7777-7777-777777777777", "p8888881-8888-8888-8888-888888888888"]'),
+
+('66666666-6666-6666-6666-666666666666', 'tech-essentials', 'Tech Essentials', 'Must-have gadgets and accessories for the modern lifestyle', 'https://cdn.xarastore.com/collections/tech-essentials.jpg', 'https://cdn.xarastore.com/banners/tech-essentials.jpg', true, 6, '["p1111111-1111-1111-1111-111111111111", "p2222221-2222-2222-2222-222222222222", "p3333331-3333-3333-3333-333333333333"]'),
+
+('77777777-7777-7777-7777-777777777777', 'home-office', 'Home Office', 'Everything you need for a productive home workspace', 'https://cdn.xarastore.com/collections/home-office.jpg', 'https://cdn.xarastore.com/banners/home-office.jpg', true, 7, '["p2222222-2222-2222-2222-222222222222", "p2222224-2222-2222-2222-222222222222", "p6666663-6666-6666-6666-666666666666"]'),
+
+('88888888-8888-8888-8888-888888888888', 'fitness-gear', 'Fitness Gear', 'Equipment and accessories for your home workout routine', 'https://cdn.xarastore.com/collections/fitness-gear.jpg', 'https://cdn.xarastore.com/banners/fitness-gear.jpg', true, 8, '["p8888881-8888-8888-8888-888888888888", "p8888882-8888-8888-8888-888888888888"]'),
+
+('99999999-9999-9999-9999-999999999999', 'gift-ideas', 'Gift Ideas', 'Perfect gifts for any occasion - birthdays, anniversaries, and more', 'https://cdn.xarastore.com/collections/gift-ideas.jpg', 'https://cdn.xarastore.com/banners/gift-ideas.jpg', true, 9, '["p3333332-3333-3333-3333-333333333333", "p6666661-6666-6666-6666-666666666666", "p7777772-7777-7777-7777-777777777777"]'),
+
+('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'premium-collection', 'Premium Collection', 'Luxury and high-end products for the discerning customer', 'https://cdn.xarastore.com/collections/premium.jpg', 'https://cdn.xarastore.com/banners/premium.jpg', true, 10, '["p1111111-1111-1111-1111-111111111111", "p2222221-2222-2222-2222-222222222222", "p7777772-7777-7777-7777-777777777777"]')
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    image = EXCLUDED.image,
+    banner_image = EXCLUDED.banner_image,
+    is_active = EXCLUDED.is_active,
+    sort_order = EXCLUDED.sort_order,
+    products = EXCLUDED.products;
+
+-- ============================================================================
+-- SETTINGS
+-- ============================================================================
+
+INSERT INTO settings (key, value, category, description, is_public) VALUES
+-- Store information
+('store.name', '"Xarastore"', 'store', 'Store name', true),
+('store.tagline', '"it''s a deal"', 'store', 'Store tagline', true),
+('store.email', '"support@xarastore.com"', 'store', 'Store contact email', true),
+('store.phone', '"0700 000 000"', 'store', 'Store contact phone', true),
+('store.address', '{"street": "Moi Avenue", "city": "Nairobi", "state": "Nairobi County", "postalCode": "00100", "country": "Kenya"}', 'store', 'Store address', true),
+('store.currency', '"KES"', 'store', 'Default currency', true),
+('store.timezone', '"Africa/Nairobi"', 'store', 'Store timezone', true),
+
+-- Shipping settings
+('shipping.free_threshold', '2000', 'shipping', 'Minimum order amount for free shipping', true),
+('shipping.standard_price', '299', 'shipping', 'Standard shipping price', true),
+('shipping.express_price', '699', 'shipping', 'Express shipping price', true),
+('shipping.same_day_price', '999', 'shipping', 'Same day shipping price', true),
+('shipping.standard_days', '3-5', 'shipping', 'Standard delivery days', true),
+('shipping.express_days', '1-2', 'shipping', 'Express delivery days', true),
+('shipping.supported_countries', '["Kenya", "Uganda", "Tanzania", "Rwanda"]', 'shipping', 'Supported countries for shipping', true),
+
+-- Tax settings
+('tax.rate', '16', 'tax', 'Default tax rate (%)', true),
+('tax.inclusive', 'true', 'tax', 'Whether prices include tax', true),
+
+-- Payment settings
+('payment.methods', '["mpesa", "card", "bank"]', 'payment', 'Enabled payment methods', true),
+('payment.mpesa_business_number', '"123456"', 'payment', 'M-Pesa business number', false),
+
+-- Feature flags
+('features.guest_checkout', 'true', 'features', 'Allow guest checkout', false),
+('features.wishlist', 'true', 'features', 'Enable wishlist feature', true),
+('features.reviews', 'true', 'features', 'Enable product reviews', true),
+('features.ratings', 'true', 'features', 'Enable product ratings', true),
+('features.comparison', 'true', 'features', 'Enable product comparison', true),
+('features.quick_view', 'true', 'features', 'Enable quick view', true),
+
+-- SEO settings
+('seo.default_title', '"Xarastore - it''s a deal"', 'seo', 'Default page title', true),
+('seo.default_description', '"Shop the best deals on electronics, fashion, home goods, and more. Kenya''s fastest-growing online marketplace."', 'seo', 'Default meta description', true),
+
+-- Social media
+('social.facebook', '"https://facebook.com/xarastore"', 'social', 'Facebook page URL', true),
+('social.twitter', '"https://twitter.com/xarastore"', 'social', 'Twitter profile URL', true),
+('social.instagram', '"https://instagram.com/xarastore"', 'social', 'Instagram profile URL', true),
+('social.tiktok', '"https://tiktok.com/@xarastore"', 'social', 'TikTok profile URL', true),
+
+-- Returns & Refunds
+('returns.enabled', 'true', 'returns', 'Enable returns', true),
+('returns.period_days', '30', 'returns', 'Return period in days', true),
+('refunds.process_days', '14', 'refunds', 'Refund processing period', true)
+ON CONFLICT (key) DO UPDATE SET
+    value = EXCLUDED.value,
+    category = EXCLUDED.category,
+    description = EXCLUDED.description,
+    is_public = EXCLUDED.is_public;
+
+-- ============================================================================
+-- UPDATE COUNTS
+-- ============================================================================
+
+-- Update product counts in categories
+UPDATE categories SET product_count = CASE slug
+    WHEN 'electronics' THEN 8
+    WHEN 'smartphones' THEN 4
+    WHEN 'laptops' THEN 4
+    WHEN 'audio' THEN 4
+    WHEN 'fashion' THEN 6
+    WHEN 'mens-fashion' THEN 4
+    WHEN 'womens-fashion' THEN 2
+    WHEN 'shoes' THEN 2
+    WHEN 'home-living' THEN 3
+    WHEN 'kitchen' THEN 2
+    WHEN 'furniture' THEN 1
+    WHEN 'beauty-health' THEN 3
+    WHEN 'skincare' THEN 3
+    WHEN 'sports-outdoors' THEN 2
+    WHEN 'fitness' THEN 2
+    ELSE 0
+END;
+
+-- Update brand product counts
+UPDATE brands SET product_count = CASE slug
+    WHEN 'apple' THEN 3
+    WHEN 'samsung' THEN 2
+    WHEN 'sony' THEN 1
+    WHEN 'hp' THEN 1
+    WHEN 'dell' THEN 1
+    WHEN 'lenovo' THEN 1
+    WHEN 'bose' THEN 1
+    WHEN 'jbl' THEN 1
+    WHEN 'nike' THEN 1
+    WHEN 'adidas' THEN 2
+    WHEN 'zara' THEN 1
+    WHEN 'hugo-boss' THEN 1
+    WHEN 'levis' THEN 1
+    WHEN 'hm' THEN 1
+    WHEN 'ikea' THEN 1
+    WHEN 'kitchenaid' THEN 1
+    WHEN 'philips' THEN 1
+    WHEN 'loreal' THEN 1
+    WHEN 'estee-lauder' THEN 1
+    WHEN 'nivea' THEN 1
+    WHEN 'under-armour' THEN 1
+    ELSE 0
+END;
+
+-- Success message
+DO $$
+BEGIN
+    RAISE NOTICE 'Seed data inserted successfully!';
+    RAISE NOTICE 'Categories: 23';
+    RAISE NOTICE 'Brands: 27';
+    RAISE NOTICE 'Products: 30+';
+    RAISE NOTICE 'Collections: 10';
+    RAISE NOTICE 'Settings: Configured';
+END $$;

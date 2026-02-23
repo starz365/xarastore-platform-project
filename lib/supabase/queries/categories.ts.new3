@@ -1,0 +1,257 @@
+import { supabase } from '../client';
+import { Category, Product } from '@/types';
+
+export async function getCategoryBySlug(slug: string): Promise<Category | null> {
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('slug', slug)
+      .single();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return transformCategory(data);
+  } catch (error) {
+    console.error('Error fetching category by slug:', error);
+    return null;
+  }
+}
+
+export async function getCategories(limit: number = 50): Promise<Category[]> {
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .is('parent_id', null)
+      .order('name')
+      .limit(limit);
+
+    if (error) throw error;
+    return (data || []).map(transformCategory);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    return [];
+  }
+}
+
+export async function getSubcategories(parentSlug: string): Promise<Category[]> {
+  try {
+    // First get the parent category
+    const { data: parent } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('slug', parentSlug)
+      .single();
+
+    if (!parent) return [];
+
+    // Get subcategories
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('parent_id', parent.id)
+      .order('name');
+
+    if (error) throw error;
+    return (data || []).map(transformCategory);
+  } catch (error) {
+    console.error('Error fetching subcategories:', error);
+    return [];
+  }
+}
+
+export async function getCategoryTree(): Promise<Category[]> {
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*, subcategories:categories(*)')
+      .is('parent_id', null)
+      .order('name');
+
+    if (error) throw error;
+    
+    return (data || []).map(category => ({
+      ...transformCategory(category),
+      subcategories: category.subcategories?.map(transformCategory) || [],
+    }));
+  } catch (error) {
+    console.error('Error fetching category tree:', error);
+    return [];
+  }
+}
+
+export async function getProductsByCategory(
+  categoryId: string,
+  filters: {
+    page?: number;
+    pageSize?: number;
+    sortBy?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    brandIds?: string[];
+    attributes?: Record<string, string[]>;
+  } = {}
+): Promise<{
+  products: Product[];
+  total: number;
+  totalPages: number;
+}> {
+  try {
+    const page = filters.page || 1;
+    const pageSize = filters.pageSize || 24;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('products')
+      .select(`
+        *,
+        brand:brands(*),
+        category:categories(*),
+        variants:product_variants(*)
+      `, { count: 'exact' })
+      .eq('category_id', categoryId)
+      .gt('stock', 0);
+
+    // Price filters
+    if (filters.minPrice) {
+      query = query.gte('price', filters.minPrice);
+    }
+    if (filters.maxPrice) {
+      query = query.lte('price', filters.maxPrice);
+    }
+
+    // Brand filters
+    if (filters.brandIds?.length) {
+      query = query.in('brand_id', filters.brandIds);
+    }
+
+    // Sorting
+    switch (filters.sortBy) {
+      case 'price-low':
+        query = query.order('price', { ascending: true });
+        break;
+      case 'price-high':
+        query = query.order('price', { ascending: false });
+        break;
+      case 'rating':
+        query = query.order('rating', { ascending: false });
+        break;
+      case 'popular':
+        query = query.order('review_count', { ascending: false });
+        break;
+      default:
+        query = query.order('created_at', { ascending: false });
+    }
+
+    const { data, count, error } = await query.range(from, to);
+
+    if (error) throw error;
+
+    const total = count || 0;
+    const totalPages = Math.ceil(total / pageSize);
+
+    return {
+      products: (data || []).map(transformProduct),
+      total,
+      totalPages,
+    };
+  } catch (error) {
+    console.error('Error fetching products by category:', error);
+    return { products: [], total: 0, totalPages: 0 };
+  }
+}
+
+export async function getCategoryAttributes(categoryId: string): Promise<Record<string, string[]>> {
+  try {
+    // This would typically query a separate attributes table
+    // For now, return empty object
+    return {};
+  } catch (error) {
+    console.error('Error fetching category attributes:', error);
+    return {};
+  }
+}
+
+export async function searchCategories(query: string): Promise<Category[]> {
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .ilike('name', `%${query}%`)
+      .order('product_count', { ascending: false })
+      .limit(10);
+
+    if (error) throw error;
+    return (data || []).map(transformCategory);
+  } catch (error) {
+    console.error('Error searching categories:', error);
+    return [];
+  }
+}
+
+// Transform functions
+function transformCategory(data: any): Category {
+  return {
+    id: data.id,
+    slug: data.slug,
+    name: data.name,
+    description: data.description || undefined,
+    parentId: data.parent_id || undefined,
+    image: data.image || undefined,
+    productCount: data.product_count || 0,
+    longDescription: data.long_description || undefined,
+    seoTitle: data.seo_title || undefined,
+    seoDescription: data.seo_description || undefined,
+    featured: data.featured || false,
+    sortOrder: data.sort_order || 0,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+function transformProduct(data: any): Product {
+  return {
+    id: data.id,
+    slug: data.slug,
+    name: data.name,
+    description: data.description,
+    price: parseFloat(data.price),
+    originalPrice: data.original_price ? parseFloat(data.original_price) : undefined,
+    sku: data.sku,
+    brand: {
+      id: data.brand.id,
+      slug: data.brand.slug,
+      name: data.brand.name,
+      logo: data.brand.logo,
+      productCount: data.brand.product_count,
+    },
+    category: {
+      id: data.category.id,
+      slug: data.category.slug,
+      name: data.category.name,
+      productCount: data.category.product_count,
+    },
+    images: data.images || [],
+    variants: data.variants?.map((v: any) => ({
+      id: v.id,
+      name: v.name,
+      price: parseFloat(v.price),
+      originalPrice: v.original_price ? parseFloat(v.original_price) : undefined,
+      sku: v.sku,
+      stock: v.stock,
+      attributes: v.attributes || {},
+    })) || [],
+    specifications: data.specifications || {},
+    rating: parseFloat(data.rating) || 0,
+    reviewCount: data.review_count || 0,
+    stock: data.stock,
+    isFeatured: data.is_featured,
+    isDeal: data.is_deal,
+    dealEndsAt: data.deal_ends_at,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}

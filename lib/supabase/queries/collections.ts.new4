@@ -1,0 +1,429 @@
+import { supabase } from '../client';
+
+export interface CollectionQueryParams {
+  page?: number;
+  pageSize?: number;
+  type?: string;
+  sort?: string;
+  searchQuery?: string;
+  featuredOnly?: boolean;
+}
+
+export async function getFeaturedCollections() {
+  try {
+    const { data, error } = await supabase
+      .from('collections')
+      .select(`
+        id,
+        slug,
+        name,
+        description,
+        image,
+        product_count,
+        is_featured,
+        is_trending,
+        view_count,
+        updated_at
+      `)
+      .eq('is_featured', true)
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(6);
+
+    if (error) throw error;
+
+    return data.map(transformCollection) || [];
+  } catch (error) {
+    console.error('Error fetching featured collections:', error);
+    return [];
+  }
+}
+
+export async function getAllCollections(params: CollectionQueryParams = {}) {
+  try {
+    const {
+      page = 1,
+      pageSize = 12,
+      type,
+      sort = 'featured',
+      searchQuery,
+      featuredOnly = false
+    } = params;
+
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('collections')
+      .select(`
+        id,
+        slug,
+        name,
+        description,
+        image,
+        product_count,
+        is_featured,
+        is_trending,
+        type,
+        view_count,
+        created_at,
+        updated_at,
+        metadata
+      `, { count: 'exact' })
+      .eq('is_active', true);
+
+    // Apply filters
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    if (featuredOnly) {
+      query = query.eq('is_featured', true);
+    }
+
+    if (searchQuery) {
+      query = query.or(`name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+    }
+
+    // Apply sorting
+    switch (sort) {
+      case 'newest':
+        query = query.order('created_at', { ascending: false });
+        break;
+      case 'popular':
+        query = query.order('view_count', { ascending: false });
+        break;
+      case 'product-count':
+        query = query.order('product_count', { ascending: false });
+        break;
+      case 'alphabetical':
+        query = query.order('name', { ascending: true });
+        break;
+      case 'featured':
+      default:
+        query = query.order('is_featured', { ascending: false })
+          .order('updated_at', { ascending: false });
+    }
+
+    const { data, count, error } = await query.range(from, to);
+
+    if (error) throw error;
+
+    return {
+      collections: data.map(transformCollection) || [],
+      total: count || 0,
+      totalPages: Math.ceil((count || 0) / pageSize),
+      currentPage: page,
+      pageSize,
+    };
+  } catch (error) {
+    console.error('Error fetching collections:', error);
+    return {
+      collections: [],
+      total: 0,
+      totalPages: 1,
+      currentPage: 1,
+      pageSize: params.pageSize || 12,
+    };
+  }
+}
+
+export async function getCollectionTypes() {
+  try {
+    const { data, error } = await supabase
+      .from('collections')
+      .select('type, count')
+      .eq('is_active', true)
+      .not('type', 'is', null)
+      .group('type');
+
+    if (error) throw error;
+
+    // Transform the response to match the expected format
+    return data.map(item => ({
+      name: item.type,
+      count: item.count,
+      description: getTypeDescription(item.type),
+      icon: getTypeIcon(item.type),
+    })).sort((a, b) => b.count - a.count);
+  } catch (error) {
+    console.error('Error fetching collection types:', error);
+    
+    // Return default types if query fails
+    return [
+      { name: 'Seasonal', count: 8, description: 'Collections for current seasons and holidays', icon: '🎄' },
+      { name: 'Themed', count: 12, description: 'Products curated around specific themes', icon: '🎨' },
+      { name: 'Editorial', count: 6, description: 'Handpicked by our style experts', icon: '✍️' },
+      { name: 'Trending', count: 15, description: 'What\'s popular right now', icon: '🔥' },
+      { name: 'Bundle', count: 5, description: 'Product bundles with special pricing', icon: '🎁' },
+    ];
+  }
+}
+
+export async function getCollectionStats() {
+  try {
+    // Get total collections count
+    const { count: totalCollections } = await supabase
+      .from('collections')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true);
+
+    // Get featured collections count
+    const { count: featuredCount } = await supabase
+      .from('collections')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .eq('is_featured', true);
+
+    // Get total products across all collections
+    const { data: collectionsData } = await supabase
+      .from('collections')
+      .select('product_count')
+      .eq('is_active', true);
+
+    const totalProducts = collectionsData?.reduce((sum, collection) => 
+      sum + (collection.product_count || 0), 0) || 0;
+
+    // Get recently updated collections (last 7 days)
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const { count: recentlyUpdated } = await supabase
+      .from('collections')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .gte('updated_at', weekAgo.toISOString());
+
+    // Get collection with most products
+    const { data: largestCollection } = await supabase
+      .from('collections')
+      .select('name, product_count')
+      .eq('is_active', true)
+      .order('product_count', { ascending: false })
+      .limit(1)
+      .single();
+
+    return {
+      totalCollections: totalCollections || 0,
+      featuredCount: featuredCount || 0,
+      totalProducts,
+      recentlyUpdated: recentlyUpdated || 0,
+      largestCollection: largestCollection?.name || 'N/A',
+      largestCollectionCount: largestCollection?.product_count || 0,
+    };
+  } catch (error) {
+    console.error('Error fetching collection stats:', error);
+    return {
+      totalCollections: 0,
+      featuredCount: 0,
+      totalProducts: 0,
+      recentlyUpdated: 0,
+      largestCollection: 'N/A',
+      largestCollectionCount: 0,
+    };
+  }
+}
+
+export async function getRecentlyUpdatedCollections(limit: number = 4) {
+  try {
+    const { data, error } = await supabase
+      .from('collections')
+      .select(`
+        id,
+        slug,
+        name,
+        image,
+        product_count,
+        updated_at
+      `)
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return data.map(transformCollection) || [];
+  } catch (error) {
+    console.error('Error fetching recently updated collections:', error);
+    return [];
+  }
+}
+
+export async function getCollectionBySlug(slug: string) {
+  try {
+    const { data, error } = await supabase
+      .from('collections')
+      .select(`
+        *,
+        collection_products (
+          product:products (
+            id,
+            slug,
+            name,
+            description,
+            price,
+            original_price,
+            images,
+            rating,
+            review_count,
+            stock,
+            brand:brands (name, slug),
+            category:categories (name, slug)
+          )
+        )
+      `)
+      .eq('slug', slug)
+      .eq('is_active', true)
+      .single();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    // Increment view count
+    await supabase
+      .from('collections')
+      .update({ view_count: (data.view_count || 0) + 1 })
+      .eq('id', data.id);
+
+    return transformCollection(data, true);
+  } catch (error) {
+    console.error('Error fetching collection by slug:', error);
+    return null;
+  }
+}
+
+export async function searchCollections(query: string, limit: number = 5) {
+  try {
+    const { data, error } = await supabase
+      .from('collections')
+      .select(`
+        id,
+        slug,
+        name,
+        description,
+        image,
+        product_count
+      `)
+      .eq('is_active', true)
+      .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
+      .order('product_count', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return data.map(transformCollection) || [];
+  } catch (error) {
+    console.error('Error searching collections:', error);
+    return [];
+  }
+}
+
+export async function getSimilarCollections(collectionId: string, limit: number = 4) {
+  try {
+    const { data: currentCollection } = await supabase
+      .from('collections')
+      .select('type, metadata')
+      .eq('id', collectionId)
+      .single();
+
+    if (!currentCollection) return [];
+
+    const { data, error } = await supabase
+      .from('collections')
+      .select(`
+        id,
+        slug,
+        name,
+        image,
+        product_count,
+        description
+      `)
+      .eq('is_active', true)
+      .eq('type', currentCollection.type)
+      .neq('id', collectionId)
+      .order('product_count', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return data.map(transformCollection) || [];
+  } catch (error) {
+    console.error('Error fetching similar collections:', error);
+    return [];
+  }
+}
+
+// Helper functions
+function transformCollection(data: any, includeProducts = false): any {
+  const transformed: any = {
+    id: data.id,
+    slug: data.slug,
+    name: data.name,
+    description: data.description,
+    image: data.image || '/placeholder-collection.jpg',
+    productCount: data.product_count || 0,
+    isFeatured: data.is_featured || false,
+    isTrending: data.is_trending || false,
+    type: data.type || 'general',
+    viewCount: data.view_count || 0,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+    metadata: data.metadata || {},
+  };
+
+  if (includeProducts && data.collection_products) {
+    transformed.products = data.collection_products
+      .map((cp: any) => cp.product)
+      .filter(Boolean)
+      .map((product: any) => ({
+        id: product.id,
+        slug: product.slug,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        originalPrice: product.original_price,
+        images: product.images || [],
+        rating: product.rating || 0,
+        reviewCount: product.review_count || 0,
+        stock: product.stock || 0,
+        brand: product.brand,
+        category: product.category,
+      }));
+  }
+
+  return transformed;
+}
+
+function getTypeDescription(type: string): string {
+  const descriptions: Record<string, string> = {
+    seasonal: 'Collections for current seasons and holidays',
+    themed: 'Products curated around specific themes',
+    editorial: 'Handpicked by our style experts',
+    trending: "What's popular right now",
+    bundle: 'Product bundles with special pricing',
+    new_arrivals: 'Recently added products',
+    best_sellers: 'Our most popular products',
+    limited_edition: 'Exclusive time-limited collections',
+    gift_guides: 'Perfect gifts for every occasion',
+    essentials: 'Must-have products',
+  };
+  
+  return descriptions[type.toLowerCase()] || 'Curated product selection';
+}
+
+function getTypeIcon(type: string): string {
+  const icons: Record<string, string> = {
+    seasonal: '🎄',
+    themed: '🎨',
+    editorial: '✍️',
+    trending: '🔥',
+    bundle: '🎁',
+    new_arrivals: '🆕',
+    best_sellers: '⭐',
+    limited_edition: '⏳',
+    gift_guides: '🎁',
+    essentials: '📦',
+  };
+  
+  return icons[type.toLowerCase()] || '📚';
+}

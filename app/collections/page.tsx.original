@@ -1,0 +1,272 @@
+import { Suspense } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { Sparkles, Clock, TrendingUp, Zap } from 'lucide-react';
+import { getFeaturedCollections, getAllCollections } from '@/lib/supabase/queries/collections';
+import { EmptyState } from '@/components/product/EmptyState';
+import { ProductGrid } from '@/components/product/ProductGrid';
+import { ProductGridSkeleton } from '@/components/product/ProductGridSkeleton';
+import { Button } from '@/components/ui/Button';
+
+export const metadata = {
+  title: 'Collections - Curated Product Selections | Xarastore',
+  description: 'Browse our curated collections of products. Discover themed selections for every occasion and need.',
+};
+
+export default async function CollectionsPage() {
+  const [featuredCollections, allCollections] = await Promise.all([
+    getFeaturedCollections(),
+    getAllCollections(),
+  ]);
+
+  const collectionTypes = [
+    {
+      name: 'Seasonal',
+      description: 'Collections for current seasons and holidays',
+      icon: '🎄',
+      count: 8,
+    },
+    {
+      name: 'Themed',
+      description: 'Products curated around specific themes',
+      icon: '🎨',
+      count: 12,
+    },
+    {
+      name: 'Editorial',
+      description: 'Handpicked by our style experts',
+      icon: '✍️',
+      count: 6,
+    },
+    {
+      name: 'Trending',
+      description: 'What\'s popular right now',
+      icon: '🔥',
+      count: 15,
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
+      {/* Hero Section */}
+      <div className="bg-gradient-to-r from-red-600 via-red-700 to-red-800 text-white">
+        <div className="container-responsive py-12 md:py-20">
+          <div className="max-w-3xl">
+            <div className="flex items-center space-x-3 mb-6">
+              <Sparkles className="w-8 h-8" />
+              <span className="text-lg font-semibold bg-white/20 px-4 py-1.5 rounded-full">
+                CURATED COLLECTIONS
+              </span>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-6">
+              Discover Curated Collections
+            </h1>
+            <p className="text-xl opacity-90 mb-8">
+              Handpicked product selections for every style, occasion, and need.
+              Our experts curate the best products just for you.
+            </p>
+            <div className="flex flex-wrap gap-6">
+              <div className="flex items-center space-x-2">
+                <Zap className="w-5 h-5" />
+                <span className="font-medium">Fresh Weekly</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <TrendingUp className="w-5 h-5" />
+                <span className="font-medium">Trending Now</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Clock className="w-5 h-5" />
+                <span className="font-medium">Limited Time</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Featured Collections */}
+      <section className="py-12">
+        <div className="container-responsive">
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold">⭐ Featured Collections</h2>
+              <p className="text-gray-600 mt-2">Our most popular curated selections</p>
+            </div>
+            <Button asChild variant="link">
+              <Link href="#all-collections">
+                View All Collections
+              </Link>
+            </Button>
+          </div>
+
+          {featuredCollections.length > 0 ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {featuredCollections.map((collection) => (
+                <Link
+                  key={collection.id}
+                  href={`/collections/${collection.slug}`}
+                  className="group block"
+                >
+                  <div className="relative overflow-hidden rounded-2xl aspect-[4/3] mb-4">
+                    <Image
+                      src={collection.image}
+                      alt={collection.name}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+                      <h3 className="text-2xl font-bold mb-2">{collection.name}</h3>
+                      <p className="text-white/90 mb-3 line-clamp-2">
+                        {collection.description}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">
+                          {collection.productCount} products
+                        </span>
+                        <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-sm">
+                          Shop Now →
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No Collections Available"
+              description="Collections will be added soon. Check back for curated product selections."
+              icon="search"
+            />
+          )}
+        </div>
+      </section>
+
+      {/* Collection Types */}
+      <section className="py-12 bg-white">
+        <div className="container-responsive">
+          <h2 className="text-2xl md:text-3xl font-bold mb-8">Browse by Type</h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {collectionTypes.map((type) => (
+              <Link
+                key={type.name}
+                href={`/collections/type/${type.name.toLowerCase()}`}
+                className="group"
+              >
+                <div className="bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-300 rounded-xl p-6 text-center transition-all duration-200">
+                  <div className="text-3xl mb-4">{type.icon}</div>
+                  <h3 className="font-semibold text-lg mb-2">{type.name}</h3>
+                  <p className="text-sm text-gray-600 mb-3">{type.description}</p>
+                  <span className="text-xs font-medium text-red-600">
+                    {type.count} collections
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* All Collections */}
+      <section id="all-collections" className="py-12">
+        <div className="container-responsive">
+          <div className="mb-8">
+            <h2 className="text-2xl md:text-3xl font-bold mb-2">All Collections</h2>
+            <p className="text-gray-600">Browse our complete library of curated collections</p>
+          </div>
+
+          {allCollections.length > 0 ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {allCollections.map((collection) => (
+                <Link
+                  key={collection.id}
+                  href={`/collections/${collection.slug}`}
+                  className="group block"
+                >
+                  <div className="relative overflow-hidden rounded-xl aspect-[3/2] mb-4">
+                    <Image
+                      src={collection.image}
+                      alt={collection.name}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                      <h3 className="font-bold text-lg mb-1">{collection.name}</h3>
+                      <p className="text-white/80 text-sm line-clamp-1">
+                        {collection.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold group-hover:text-red-600 transition-colors">
+                        {collection.name}
+                      </h4>
+                      <p className="text-sm text-gray-500">
+                        {collection.productCount} products
+                      </p>
+                    </div>
+                    <span className="text-sm font-medium text-red-600">
+                      View Collection
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No Collections Found"
+              description="New collections are being curated. Please check back soon."
+              icon="search"
+              action={{
+                label: 'Browse Products',
+                href: '/shop',
+              }}
+            />
+          )}
+        </div>
+      </section>
+
+      {/* Collection Benefits */}
+      <section className="py-12 bg-gray-50">
+        <div className="container-responsive">
+          <h2 className="text-2xl md:text-3xl font-bold text-center mb-12">
+            Why Shop Collections?
+          </h2>
+          <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Expertly Curated</h3>
+              <p className="text-gray-600">
+                Our experts handpick products that work perfectly together.
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Zap className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Time Saving</h3>
+              <p className="text-gray-600">
+                Discover complete looks and sets without endless browsing.
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <TrendingUp className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Trend Focused</h3>
+              <p className="text-gray-600">
+                Stay ahead with collections featuring the latest trends.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}

@@ -1,0 +1,192 @@
+import { headers } from 'next/headers';
+
+export async function getRouteInfo() {
+  const headersList = await headers();
+  const pathname = headersList.get('x-invoke-path') || '/';
+  const searchParams = headersList.get('x-invoke-query') || '';
+  
+  // Extract route segments
+  const segments = pathname.split('/').filter(Boolean);
+  const routeType = determineRouteType(pathname, segments);
+  
+  return {
+    pathname,
+    segments,
+    type: routeType.type,
+    subType: routeType.subType,
+    params: extractParams(pathname, segments),
+    isHomePage: pathname === '/',
+    loadingMessage: getLoadingMessage(routeType, segments),
+    loadingHint: getLoadingHint(routeType, searchParams),
+  };
+}
+
+function determineRouteType(pathname: string, segments: string[]) {
+  if (pathname === '/') {
+    return { type: 'home', subType: null };
+  }
+  
+  if (pathname.startsWith('/product/')) {
+    return { type: 'product', subType: 'detail' };
+  }
+  
+  if (pathname.startsWith('/category/')) {
+    return { type: 'category', subType: segments[1] || 'list' };
+  }
+  
+  if (pathname.startsWith('/shop')) {
+    return { type: 'shop', subType: 'listing' };
+  }
+  
+  if (pathname.startsWith('/cart')) {
+    return { type: 'cart', subType: 'view' };
+  }
+  
+  if (pathname.startsWith('/checkout')) {
+    return { type: 'checkout', subType: getCheckoutStep(pathname) };
+  }
+  
+  if (pathname.startsWith('/account')) {
+    return { type: 'account', subType: segments[1] || 'overview' };
+  }
+  
+  if (pathname.startsWith('/search')) {
+    return { type: 'search', subType: 'results' };
+  }
+  
+  if (pathname.startsWith('/deals')) {
+    return { type: 'deals', subType: segments[1] || 'list' };
+  }
+  
+  if (pathname.startsWith('/brands/')) {
+    return { type: 'brand', subType: 'detail' };
+  }
+  
+  if (pathname.startsWith('/collections/')) {
+    return { type: 'collection', subType: 'detail' };
+  }
+  
+  return { type: 'generic', subType: null };
+}
+
+function getCheckoutStep(pathname: string): string {
+  if (pathname.includes('/address')) return 'address';
+  if (pathname.includes('/delivery')) return 'delivery';
+  if (pathname.includes('/payment')) return 'payment';
+  if (pathname.includes('/confirmation')) return 'confirmation';
+  return 'start';
+}
+
+function extractParams(pathname: string, segments: string[]): Record<string, string> {
+  const params: Record<string, string> = {};
+  
+  if (pathname.startsWith('/product/') && segments[1]) {
+    params.slug = segments[1];
+  }
+  
+  if (pathname.startsWith('/category/') && segments[1]) {
+    params.slug = segments[1];
+  }
+  
+  if (pathname.startsWith('/brands/') && segments[1]) {
+    params.slug = segments[1];
+  }
+  
+  if (pathname.startsWith('/collections/') && segments[1]) {
+    params.slug = segments[1];
+  }
+  
+  return params;
+}
+
+function getLoadingMessage(routeType: any, segments: string[]): string {
+  const messages: Record<string, string> = {
+    home: 'Loading your personalized shopping experience…',
+    product: 'Fetching product details and reviews…',
+    category: 'Loading category products and filters…',
+    shop: 'Preparing shop catalog…',
+    cart: 'Loading your shopping cart…',
+    checkout: 'Preparing secure checkout…',
+    checkout_address: 'Loading address information…',
+    checkout_delivery: 'Calculating delivery options…',
+    checkout_payment: 'Initializing payment gateways…',
+    account: 'Loading your account…',
+    account_orders: 'Fetching your order history…',
+    account_wishlist: 'Loading your saved items…',
+    search: 'Searching for products…',
+    deals: 'Loading exclusive deals and offers…',
+    brand: 'Fetching brand information…',
+    collection: 'Loading collection products…',
+    generic: 'Loading page content…',
+  };
+  
+  const key = routeType.subType 
+    ? `${routeType.type}_${routeType.subType}`
+    : routeType.type;
+  
+  return messages[key] || messages.generic;
+}
+
+function getLoadingHint(routeType: any, searchParams: string): string {
+  const hints: Record<string, string> = {
+    product: 'Loading product images, specifications, and reviews…',
+    category: 'Applying filters and sorting products…',
+    checkout: 'Verifying cart items and calculating totals…',
+    checkout_payment: 'Connecting to secure payment processors…',
+    search: searchParams ? `Searching for "${searchParams}"…` : 'Preparing search results…',
+    deals: 'Checking for active promotions and discounts…',
+    account_orders: 'Retrieving your complete order history…',
+    account_wishlist: 'Loading all your saved items…',
+  };
+  
+  const key = routeType.subType 
+    ? `${routeType.type}_${routeType.subType}`
+    : routeType.type;
+  
+  return hints[key] || 'Just a moment, we are preparing everything…';
+}
+
+export async function getRouteLoadingData(routeInfo: any) {
+  // In a real implementation, this would fetch data based on the route
+  // For example:
+  // - For product page: fetch product stock, related products
+  // - For category: fetch filter options, category info
+  // - For cart: fetch cart items count, total
+  // - For checkout: fetch available payment methods, shipping options
+  
+  // This is a placeholder that would be replaced with actual data fetching
+  switch (routeInfo.type) {
+    case 'product':
+      return {
+        productId: routeInfo.params.slug,
+        loadingVariants: true,
+        loadingReviews: true,
+        loadingRelated: true,
+      };
+    
+    case 'category':
+      return {
+        categoryId: routeInfo.params.slug,
+        loadingFilters: true,
+        loadingProducts: true,
+        estimatedCount: 0,
+      };
+    
+    case 'cart':
+      return {
+        loadingItems: true,
+        loadingTotals: true,
+        loadingCoupons: true,
+      };
+    
+    case 'checkout':
+      return {
+        loadingAddresses: true,
+        loadingShipping: true,
+        loadingPaymentMethods: true,
+      };
+    
+    default:
+      return {};
+  }
+}

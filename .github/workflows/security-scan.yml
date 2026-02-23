@@ -1,0 +1,217 @@
+xarastore/.github/workflows/security-scan.yml
+name: Security Scanning
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Weekly on Sunday
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.base_ref }}
+          head: ${{ github.sha }}
+
+  dependency-scanning:
+    name: Dependency Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --all-projects --severity-threshold=medium
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'Xarastore'
+          path: '.'
+          format: 'HTML'
+          args: >
+            --enableExperimental
+            --failOnCVSS 7
+            --scan **/*.js
+            --scan **/*.ts
+            --scan **/*.json
+
+      - name: Upload dependency check report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: dependency-check-report
+          path: dependency-check-report.html
+
+  code-scanning:
+    name: Code Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript, typescript
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+      - name: Run ESLint security rules
+        run: |
+          npm install --save-dev eslint-plugin-security
+          npx eslint . --ext .js,.jsx,.ts,.tsx --config .eslintrc.security.js
+
+      - name: Run SAST scan with Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/ci
+
+  container-scanning:
+    name: Container Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t xarastore:scan .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'xarastore:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Docker Bench Security
+        run: |
+          docker run --rm --net host --pid host --userns host --cap-add audit_control \
+            -e DOCKER_CONTENT_TRUST=1 \
+            -v /var/lib:/var/lib \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v /etc:/etc \
+            docker/docker-bench-security
+
+  infrastructure-scanning:
+    name: Infrastructure Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Checkov on Kubernetes manifests
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: kubernetes/
+          framework: kubernetes
+          quiet: true
+          soft_fail: false
+
+      - name: Run Checkov on Dockerfiles
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ./
+          framework: dockerfile
+          quiet: true
+
+      - name: Run Terrascan on Infrastructure as Code
+        uses: accurics/terrascan-action@main
+        with:
+          iac_type: k8s
+          iac_version: v1
+          policy_type: k8s
+          only_warn: false
+
+  compliance-check:
+    name: Compliance Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run GDPR compliance check
+        run: |
+          # Check for PII data handling
+          grep -r "email\|phone\|address\|password\|credit\|card" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" src/ || true
+
+      - name: Run PCI DSS compliance check
+        run: |
+          # Check for credit card handling
+          grep -r "card\|payment\|stripe\|mpesa" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" src/ || true
+
+      - name: Generate compliance report
+        run: |
+          echo "# Security Compliance Report" > compliance-report.md
+          echo "Generated: $(date)" >> compliance-report.md
+          echo "" >> compliance-report.md
+          echo "## Checks Performed" >> compliance-report.md
+          echo "- Secret Scanning" >> compliance-report.md
+          echo "- Dependency Scanning" >> compliance-report.md
+          echo "- Code Scanning" >> compliance-report.md
+          echo "- Container Scanning" >> compliance-report.md
+          echo "- Infrastructure Scanning" >> compliance-report.md
+          echo "- GDPR Compliance" >> compliance-report.md
+          echo "- PCI DSS Compliance" >> compliance-report.md
+
+      - name: Upload compliance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: compliance-report
+          path: compliance-report.md
+
+  alert:
+    name: Security Alert
+    runs-on: ubuntu-latest
+    needs: [secret-scanning, dependency-scanning, code-scanning, container-scanning, infrastructure-scanning]
+    if: failure()
+    steps:
+      - name: Send security alert
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#security-alerts'
+          text: "Security scanning failed. Please review the findings."
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

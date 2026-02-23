@@ -1,0 +1,203 @@
+{
+  "extends": ["@commitlint/config-conventional"],
+  "rules": {
+    "type-enum": [
+      2,
+      "always",
+      [
+        "feat",
+        "fix",
+        "docs",
+        "style",
+        "refactor",
+        "perf",
+        "test",
+        "build",
+        "ci",
+        "chore",
+        "revert",
+        "security",
+        "wip",
+        "release"
+      ]
+    ],
+    "type-case": [2, "always", "lower-case"],
+    "type-empty": [2, "never"],
+    "scope-case": [2, "always", "kebab-case"],
+    "subject-case": [2, "never", ["sentence-case", "start-case", "pascal-case", "upper-case"]],
+    "subject-empty": [2, "never"],
+    "subject-full-stop": [2, "never", "."],
+    "subject-max-length": [2, "always", 72],
+    "body-leading-blank": [1, "always"],
+    "body-max-line-length": [2, "always", 100],
+    "body-case": [2, "always", "sentence-case"],
+    "footer-leading-blank": [1, "always"],
+    "footer-max-line-length": [2, "always", 100],
+    "header-max-length": [2, "always", 72],
+    "references-empty": [2, "never"],
+    "signed-off-by": [2, "always", "Signed-off-by:"],
+    "trailer-exists": [2, "always", "Signed-off-by:"],
+    "scope-enum": [
+      2,
+      "always",
+      [
+        "app",
+        "api",
+        "auth",
+        "cart",
+        "checkout",
+        "product",
+        "category",
+        "search",
+        "user",
+        "order",
+        "payment",
+        "shipping",
+        "inventory",
+        "pricing",
+        "analytics",
+        "seo",
+        "pwa",
+        "ui",
+        "layout",
+        "components",
+        "styles",
+        "config",
+        "deps",
+        "ci",
+        "cd",
+        "docker",
+        "k8s",
+        "docs",
+        "tests",
+        "security",
+        "performance",
+        "monitoring",
+        "logging"
+      ]
+    ],
+    "scope-empty": [2, "never"]
+  },
+  "parserPreset": {
+    "parserOpts": {
+      "issuePrefixes": ["XARA-"],
+      "referenceActions": ["closes", "fixes", "resolves"],
+      "noteKeywords": ["BREAKING CHANGE", "DEPRECATED"],
+      "fieldPattern": "^[A-Za-z-]+:\\s.+$"
+    }
+  },
+  "helpUrl": "https://github.com/conventional-changelog/commitlint/#what-is-commitlint",
+  "defaultIgnores": true,
+  "ignores": [
+    {
+      "subject": "^WIP:",
+      "modifies": ["type-enum"]
+    },
+    {
+      "subject": "^Merge branch",
+      "modifies": ["subject-case", "subject-empty"]
+    },
+    {
+      "subject": "^Merge pull request",
+      "modifies": ["subject-case", "subject-empty"]
+    }
+  ],
+  "prompt": {
+    "questions": {
+      "type": {
+        "description": "Select the type of change that you're committing",
+        "enum": {
+          "feat": {
+            "description": "A new feature",
+            "title": "Features",
+            "emoji": "✨"
+          },
+          "fix": {
+            "description": "A bug fix",
+            "title": "Bug Fixes",
+            "emoji": "🐛"
+          },
+          "docs": {
+            "description": "Documentation only changes",
+            "title": "Documentation",
+            "emoji": "📚"
+          },
+          "style": {
+            "description": "Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)",
+            "title": "Styles",
+            "emoji": "💎"
+          },
+          "refactor": {
+            "description": "A code change that neither fixes a bug nor adds a feature",
+            "title": "Code Refactoring",
+            "emoji": "📦"
+          },
+          "perf": {
+            "description": "A code change that improves performance",
+            "title": "Performance Improvements",
+            "emoji": "🚀"
+          },
+          "test": {
+            "description": "Adding missing tests or correcting existing tests",
+            "title": "Tests",
+            "emoji": "🚨"
+          },
+          "build": {
+            "description": "Changes that affect the build system or external dependencies (example scopes: gulp, broccoli, npm)",
+            "title": "Builds",
+            "emoji": "🛠"
+          },
+          "ci": {
+            "description": "Changes to our CI configuration files and scripts (example scopes: Travis, Circle, BrowserStack, SauceLabs)",
+            "title": "Continuous Integrations",
+            "emoji": "⚙️"
+          },
+          "chore": {
+            "description": "Other changes that don't modify src or test files",
+            "title": "Chores",
+            "emoji": "♻️"
+          },
+          "revert": {
+            "description": "Reverts a previous commit",
+            "title": "Reverts",
+            "emoji": "🗑"
+          },
+          "security": {
+            "description": "Security improvements or fixes",
+            "title": "Security",
+            "emoji": "🔒"
+          },
+          "wip": {
+            "description": "Work in progress",
+            "title": "WIP",
+            "emoji": "🚧"
+          },
+          "release": {
+            "description": "Release version changes",
+            "title": "Releases",
+            "emoji": "🎉"
+          }
+        }
+      },
+      "scope": {
+        "description": "What is the scope of this change (e.g., component or file name)"
+      },
+      "subject": {
+        "description": "Write a short, imperative tense description of the change"
+      },
+      "body": {
+        "description": "Provide a longer description of the change"
+      },
+      "footer": {
+        "description": "List any breaking changes or issue references"
+      },
+      "confirmCommit": {
+        "description": "Are you sure you want to proceed with the commit above?"
+      }
+    },
+    "settings": {
+      "enableMultipleScopes": true,
+      "scopeEnumSeparator": ","
+    }
+  }
+}

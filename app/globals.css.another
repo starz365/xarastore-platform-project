@@ -1,0 +1,199 @@
+@import '../styles/design-tokens.css';
+@import '../styles/design-tokens.css';
+@import '../styles/loading-animations.css';
+
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand-red: #dc2626;
+    --brand-red-light: #fecaca;
+    --brand-red-dark: #991b1b;
+
+    --font-inter: 'Inter', system-ui, sans-serif;
+  }
+  * {
+    @apply border-gray-200;
+  }
+  html {
+    @apply scroll-smooth;
+    -webkit-tap-highlight-color: transparent;
+    font-family: var(--font-inter), system-ui, sans-serif;
+    text-rendering: optimizeLegibility;  
+    -webkit-font-smoothing: antialiased; 
+  }
+  body {
+    @apply antialiased;
+    text-rendering: optimizeLegibility;  
+    -webkit-font-smoothing: antialiased; 
+    -moz-osx-font-smoothing: grayscale;  
+    font-family: var(--font-inter), system-ui, sans-serif;
+
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-red;
+  }
+  ::selection {
+    @apply bg-brand-red-light text-gray-900;
+  }
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full hover:bg-gray-400;
+  }
+}
+
+
+
+
+/* PWA offline fallback page styles */   
+.offline-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  min-height: 100vh;
+  padding: 2rem;
+  background-color: theme(colors.gray.50);
+  color: theme(colors.gray.900);
+}
+
+.offline-page h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.offline-page p {
+  font-size: 1.25rem;
+  color: theme(colors.gray.700);
+}
+
+/* Hide install prompt & offline indicator by default (hydration-safe) */
+[data-hydrated='false'] .offline-indicator,
+[data-hydrated='false'] .install-prompt {
+  display: none;
+}
+
+/* Add utility classes for toast positioning */
+.toast-container {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 1000;
+}
+
+/* 8. Optional: Animations (from tailwind config) */
+@layer utilities {
+  .fade-in { animation: fadeIn 0.3s ease-in-out; }
+  .slide-up { animation: slideUp 0.3s ease-out; }
+  .slide-down { animation: slideDown 0.3s ease-out; }
+}
+
+
+
+
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-red hover:bg-brand-red-dark text-white font-medium py-2.5 px-6 rounded-lg transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus:ring-2 focus:ring-brand-red focus:ring-offset-2;      
+           transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+           focus:ring-2 focus:ring-red-500 focus:ring-offset-2 shadow-sm hover:shadow-md;
+
+
+
+  .input-field {
+    @apply w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:border-red-500
+          focus:ring-2 focus:ring-red-500/20 transition-all duration-200 outline-none
+          disabled:bg-gray-100 disabled:cursor-not-allowed;
+  }
+
+
+  }
+  .btn-secondary {
+    @apply bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 font-medium py-2.5 px-6 rounded-lg
+                transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+                focus:ring-2 focus:ring-brand-red focus:ring-offset-2;
+  }
+  .card-hover {
+    @apply hover:shadow-lg transition-shadow duration-200;
+  }
+  .skeleton {
+    @apply animate-pulse bg-gray-200 rounded;
+  }
+  .price-old {
+    @apply text-gray-400 line-through text-sm;
+  }
+  .price-new {
+    @apply text-brand-red font-bold text-lg;
+  }
+  .deal-badge {
+    @apply bg-brand-red text-white text-xs font-bold px-2 py-1 rounded;
+  }
+  .input-field {
+    @apply w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:border-brand-red
+                focus:ring-2 focus:ring-brand-red/20 transition-all duration-200 outline-none;
+  }
+  .container-responsive {
+    @apply container mx-auto px-4 sm:px-6 lg:px-8;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {   
+    display: none;
+  }
+
+
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+
+}
+
+
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);        
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;     
+}

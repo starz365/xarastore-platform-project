@@ -1,0 +1,482 @@
+import Link from 'next/link';
+import { Facebook, Twitter, Instagram, Youtube, Mail, Phone, MapPin, Shield, Truck, CreditCard, Headphones, RefreshCw } from 'lucide-react';
+import { AppStoreBadges } from '@/components/shared/AppStoreBadges';
+
+export function Footer() {
+  const currentYear = new Date().getFullYear();
+
+  const footerLinks = {
+    shop: [
+      { name: 'All Products', href: '/shop' },
+      { name: 'New Arrivals', href: '/shop?sort=newest' },
+      { name: 'Best Sellers', href: '/shop?sort=popular' },
+      { name: 'Deals', href: '/deals' },
+      { name: 'Gift Cards', href: '/gift-cards' },
+      // Added from FooterTwo
+      { name: 'All Categories', href: '/shop' },
+      { name: 'Flash Sales', href: '/deals/flash' },
+    ].filter((value, index, self) => 
+      index === self.findIndex((t) => t.name === value.name)
+    ),
+    categories: [
+      { name: 'Electronics', href: '/category/electronics' },
+      { name: 'Fashion', href: '/category/fashion' },
+      { name: 'Home & Garden', href: '/category/home-garden' },
+      { name: 'Beauty', href: '/category/beauty' },
+      { name: 'Sports', href: '/category/sports' },
+    ],
+    help: [
+      { name: 'Help Center', href: '/help' },
+      { name: 'Contact Us', href: '/help/contact' },
+      { name: 'Shipping Info', href: '/legal/shipping' },
+      { name: 'Returns & Exchanges', href: '/help/returns' },
+      { name: 'Size Guide', href: '/help/size-guide' },
+      // Added from FooterTwo
+      { name: 'Track Your Order', href: '/account/orders' },
+      { name: 'Returns & Refunds', href: '/help/returns' },
+      { name: 'FAQs', href: '/help/faq' },
+    ].filter((value, index, self) => 
+      index === self.findIndex((t) => t.name === value.name)
+    ),
+    about: [
+      { name: 'About Us', href: '/about' },
+      { name: 'Careers', href: '/careers' },
+      { name: 'Press', href: '/press' },
+      { name: 'Sustainability', href: '/sustainability' },
+      { name: 'Investor Relations', href: '/investors' },
+      { name: 'Affiliate Program', href: '/affiliate' },
+      // Added from FooterTwo
+      { name: 'Blog', href: '/blog' },
+    ],
+    company: [ // New section from FooterTwo
+      { name: 'About Us', href: '/about' },
+      { name: 'Careers', href: '/careers' },
+      { name: 'Press', href: '/press' },
+      { name: 'Blog', href: '/blog' },
+      { name: 'Affiliate Program', href: '/affiliate' },
+    ],
+    legal: [
+      { name: 'Terms of Service', href: '/legal/terms' },
+      { name: 'Privacy Policy', href: '/legal/privacy' },
+      { name: 'Cookie Policy', href: '/legal/cookies' },
+      { name: 'Accessibility', href: '/legal/accessibility' },
+      { name: 'Sitemap', href: '/sitemap.xml' },
+      // Added from FooterTwo
+      { name: 'Copyright Policy', href: '/legal/copyright' },
+      { name: 'Payment Policy', href: '/legal/payment' },
+    ],
+  };
+
+  const trustBadges = [
+    { icon: Shield, text: 'Secure Payments', description: '256-bit SSL encryption' },
+    { icon: Truck, text: 'Free Delivery', description: 'Over KES 2,000' },
+    { icon: CreditCard, text: 'Easy Returns', description: '30-Day Policy' },
+    { icon: Headphones, text: '24/7 Support', description: 'Dedicated Help' },
+    // Added from FooterTwo
+    { icon: RefreshCw, text: 'Best Price', description: 'Guaranteed' },
+  ];
+
+  const paymentMethods = [
+    'visa', 'mastercard', 'amex', 'mpesa', 'paypal', 'bank',
+  ];
+
+  const paymentMethodsDetailed = [ // New from FooterTwo
+    { name: 'Visa', icon: '💳' },
+    { name: 'Mastercard', icon: '💳' },
+    { name: 'M-Pesa', icon: '📱' },
+    { name: 'PayPal', icon: '💰' },
+    { name: 'Bank Transfer', icon: '🏦' },
+  ];
+
+  return (
+    <footer className="bg-gray-900 text-white">
+      {/* Trust Badges - Combined both versions */}
+      <div className="border-b border-gray-800">
+        <div className="container-responsive py-8">
+          {/* Original grid layout */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mb-8">
+            {trustBadges.map((badge, index) => {
+              const Icon = badge.icon;
+              return (
+                <div key={index} className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-red-600/20 rounded-lg flex items-center justify-center">
+                    <Icon className="w-6 h-6 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">{badge.text}</h3>
+                    <p className="text-sm text-gray-400">{badge.description}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Additional trust bar from FooterTwo */}
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <Truck className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-white">Free Delivery</h4>
+                  <p className="text-sm text-gray-400">Over KES 2,000</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <Shield className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-white">Secure Payment</h4>
+                  <p className="text-sm text-gray-400">100% Protected</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <CreditCard className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-white">Best Price</h4>
+                  <p className="text-sm text-gray-400">Guaranteed</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <RefreshCw className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-white">Easy Returns</h4>
+                  <p className="text-sm text-gray-400">30 Days Policy</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Footer - Expanded layout */}
+      <div className="container-responsive py-12">
+        <div className="grid grid-cols-2 lg:grid-cols-7 gap-8">
+          {/* Brand - Enhanced with newsletter from FooterTwo */}
+          <div className="col-span-2 lg:col-span-2">
+            <Link href="/" className="flex items-center space-x-2 mb-6">
+              <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-xl">X</span>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold">Xarastore</h1>
+                <p className="text-sm text-gray-400">it's a deal</p>
+              </div>
+            </Link>
+            <p className="text-gray-400 text-sm mb-6">
+              Kenya's fastest-growing online marketplace. Amazing deals on everything you need.
+            </p>
+            
+            {/* Newsletter from FooterTwo */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-3">Stay Updated</h3>
+              <div className="flex">
+                <input
+                  type="email"
+                  placeholder="Enter your email"
+                  className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-l-lg focus:outline-none focus:border-red-500 text-sm"
+                />
+                <button className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-r-lg transition-colors text-sm">
+                  Subscribe
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">Subscribe for exclusive deals and updates</p>
+            </div>
+
+            {/* Social Links - Enhanced */}
+            <div className="flex space-x-4 mb-4">
+              <a href="https://facebook.com/xarastore" className="text-gray-400 hover:text-white transition-colors p-2 bg-gray-800 hover:bg-gray-700 rounded-lg">
+                <Facebook className="w-5 h-5" />
+              </a>
+              <a href="https://twitter.com/xarastore" className="text-gray-400 hover:text-white transition-colors p-2 bg-gray-800 hover:bg-gray-700 rounded-lg">
+                <Twitter className="w-5 h-5" />
+              </a>
+              <a href="https://instagram.com/xarastore" className="text-gray-400 hover:text-white transition-colors p-2 bg-gray-800 hover:bg-gray-700 rounded-lg">
+                <Instagram className="w-5 h-5" />
+              </a>
+              <a href="https://youtube.com/xarastore" className="text-gray-400 hover:text-white transition-colors p-2 bg-gray-800 hover:bg-gray-700 rounded-lg">
+                <Youtube className="w-5 h-5" />
+              </a>
+            </div>
+          </div>
+
+          {/* Shop */}
+          <div>
+            <h3 className="font-bold text-lg mb-4">Shop</h3>
+            <ul className="space-y-3">
+              {footerLinks.shop.map((link, index) => (
+                <li key={`${link.name}-${index}`}>
+                  <Link
+                    href={link.href}
+                    className="text-gray-400 hover:text-white transition-colors text-sm"
+                  >
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Categories */}
+          <div>
+            <h3 className="font-bold text-lg mb-4">Categories</h3>
+            <ul className="space-y-3">
+              {footerLinks.categories.map((link) => (
+                <li key={link.name}>
+                  <Link
+                    href={link.href}
+                    className="text-gray-400 hover:text-white transition-colors text-sm"
+                  >
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Help */}
+          <div>
+            <h3 className="font-bold text-lg mb-4">Help</h3>
+            <ul className="space-y-3">
+              {footerLinks.help.map((link, index) => (
+                <li key={`${link.name}-${index}`}>
+                  <Link
+                    href={link.href}
+                    className="text-gray-400 hover:text-white transition-colors text-sm"
+                  >
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* About */}
+          <div>
+            <h3 className="font-bold text-lg mb-4">About</h3>
+            <ul className="space-y-3">
+              {footerLinks.about.map((link) => (
+                <li key={link.name}>
+                  <Link
+                    href={link.href}
+                    className="text-gray-400 hover:text-white transition-colors text-sm"
+                  >
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Company - New from FooterTwo */}
+          <div>
+            <h3 className="font-bold text-lg mb-4">Company</h3>
+            <ul className="space-y-3">
+              {footerLinks.company.map((link) => (
+                <li key={link.name}>
+                  <Link
+                    href={link.href}
+                    className="text-gray-400 hover:text-white transition-colors text-sm"
+                  >
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Contact */}
+          <div>
+            <h3 className="font-bold text-lg mb-4">Contact Us</h3>
+            <div className="space-y-4">
+              <div className="flex items-start space-x-3">
+                <Phone className="w-5 h-5 text-gray-400 mt-0.5" />
+                <div>
+                  <p className="font-medium">Call Us</p>
+                  <p className="text-sm text-gray-400">+254 711 234 567</p>
+                  <p className="text-sm text-gray-400">+254 700 000 000</p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3">
+                <Mail className="w-5 h-5 text-gray-400 mt-0.5" />
+                <div>
+                  <p className="font-medium">Email Us</p>
+                  <p className="text-sm text-gray-400">help@xarastore.com</p>
+                  <p className="text-sm text-gray-400">support@xarastore.com</p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3">
+                <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
+                <div>
+                  <p className="font-medium">Visit Us</p>
+                  <p className="text-sm text-gray-400">Nairobi, Kenya</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Enhanced Contact Info from FooterTwo */}
+        <div className="mt-12 pt-8 border-t border-gray-800">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="flex items-center space-x-3">
+              <Phone className="w-5 h-5 text-red-500" />
+              <div>
+                <h4 className="text-white font-medium">Call Us</h4>
+                <p className="text-gray-400">+254 700 000 000</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Mail className="w-5 h-5 text-red-500" />
+              <div>
+                <h4 className="text-white font-medium">Email Us</h4>
+                <p className="text-gray-400">support@xarastore.com</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <MapPin className="w-5 h-5 text-red-500" />
+              <div>
+                <h4 className="text-white font-medium">Visit Us</h4>
+                <p className="text-gray-400">Nairobi, Kenya</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Payment Methods - Combined both versions */}
+        <div className="mt-8 pt-8 border-t border-gray-800">
+          <h3 className="font-bold text-lg mb-4">We Accept</h3>
+          <div className="flex flex-col gap-6">
+            {/* Original payment methods */}
+            <div className="flex flex-wrap gap-4">
+              {paymentMethods.map((method) => (
+                <div
+                  key={method}
+                  className="w-12 h-8 bg-gray-800 rounded flex items-center justify-center"
+                >
+                  <span className="text-xs font-medium uppercase">{method}</span>
+                </div>
+              ))}
+            </div>
+            
+            {/* Detailed payment methods from FooterTwo */}
+            <div className="flex flex-wrap items-center gap-4">
+              {paymentMethodsDetailed.map((method) => (
+                <div key={method.name} className="flex items-center space-x-2 px-3 py-2 bg-gray-800 rounded-lg">
+                  <span>{method.icon}</span>
+                  <span className="text-sm">{method.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Payment Methods Footer Bar */}
+      <div className="border-t border-gray-800 py-6">
+        <div className="container-responsive">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <h4 className="font-medium mb-3">Accepted Payment Methods</h4>
+              <div className="flex flex-wrap gap-4">
+                {paymentMethods.map((method) => (
+                  <div
+                    key={method}
+                    className="w-12 h-8 bg-gray-800 rounded flex items-center justify-center"
+                  >
+                    <span className="text-xs font-medium uppercase">{method}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="text-center md:text-right">
+              <p className="text-sm text-gray-400">
+                © {currentYear} Xarastore. All rights reserved.
+              </p>
+              <div className="flex flex-wrap justify-center md:justify-end gap-4 mt-2 text-sm text-gray-400">
+                {footerLinks.legal.map((link) => (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    className="hover:text-white transition-colors"
+                  >
+                    {link.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* App Download */}
+      <div className="bg-gray-800 py-6">
+        <div className="container-responsive">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <h4 className="font-bold text-lg mb-2">Get the Xarastore App</h4>
+              <p className="text-gray-400 text-sm">
+                Shop on the go with our mobile app. Exclusive app-only deals!
+              </p>
+            </div>
+            <div className="flex gap-4">
+              <a
+                href="#"
+                className="inline-flex items-center space-x-2 bg-black hover:bg-gray-900 text-white px-6 py-3 rounded-lg transition-colors"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                </svg>
+                <div className="text-left">
+                  <div className="text-xs">Download on the</div>
+                  <div className="font-bold">App Store</div>
+                </div>
+              </a>
+              <a
+                href="#"
+                className="inline-flex items-center space-x-2 bg-black hover:bg-gray-900 text-white px-6 py-3 rounded-lg transition-colors"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M3 20.5v-17c0-.59.34-1.11.84-1.35L13.69 12l-9.85 9.85c-.5-.24-.84-.76-.84-1.35zm13.81-5.38L6.05 21.34l8.49-8.49 2.27 2.27zm3.35-4.31c.34.27.59.69.59 1.19s-.25.92-.59 1.19l-2.01 1.55-2.27-2.27 2.01-1.55c.49-.37 1.11-.37 1.27.89zM6.05 2.66l10.76 6.22-2.27 2.27-8.49-8.49z"/>
+                </svg>
+                <div className="text-left">
+                  <div className="text-xs">Get it on</div>
+                  <div className="font-bold">Google Play</div>
+                </div>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Bar from FooterTwo */}
+      <div className="bg-gray-900 border-t border-gray-800 py-6">
+        <div className="container-responsive">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="text-sm text-gray-500 mb-4 md:mb-0">
+              © {currentYear} Xarastore. All rights reserved.
+            </div>
+            <div className="flex flex-wrap gap-4">
+              {footerLinks.legal.map((link) => (
+                <Link
+                  key={link.name}
+                  href={link.href}
+                  className="text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  {link.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}

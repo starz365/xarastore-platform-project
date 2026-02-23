@@ -1,0 +1,61 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Toaster, ToastProvider, toast } from '@/components/shared/Toast';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
+import { OfflineIndicator } from '@/components/shared/OfflineIndicator';
+import { inter } from './layout';
+
+export default function OfflinePage() {
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    // Listen for network changes
+    const handleOnline = () => {
+      setOnline(true);
+      toast.success('You are back online!');
+    };
+    const handleOffline = () => {
+      setOnline(false);
+      toast.error('You are offline. Some features may be unavailable.');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  return (
+    <div
+      className={`${inter.className} flex flex-col min-h-screen bg-gray-50 text-gray-900`}
+    >
+      <ToastProvider>
+        <OfflineIndicator />
+        <Header />
+
+        <main className="flex-1 flex flex-col items-center justify-center text-center px-4">
+          <h1 className="text-4xl md:text-5xl font-bold text-brand-red mb-4 animate-fade-in">
+            You are offline
+          </h1>
+          <p className="text-lg md:text-xl text-gray-700 mb-6 animate-fade-in">
+            Sorry, the application is currently offline. Please check your internet connection.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 rounded-lg bg-brand-red text-white font-semibold shadow-card-hover hover:bg-brand-red-dark transition-colors animate-slide-up"
+          >
+            Retry Connection
+          </button>
+        </main>
+
+        <Footer />
+        <Toaster />
+      </ToastProvider>
+    </div>
+  );
+}

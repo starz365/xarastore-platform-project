@@ -1,0 +1,198 @@
+import { supabase } from '../client';
+import { Collection, Product } from '@/types';
+
+export async function getFeaturedCollections(limit: number = 3): Promise<Collection[]> {
+  try {
+    const { data, error } = await supabase
+      .from('collections')
+      .select(`
+        *,
+        collection_products(
+          product:products(
+            id,
+            slug,
+            name,
+            price,
+            original_price,
+            images,
+            brand:brands(name, slug),
+            rating,
+            review_count
+          )
+        )
+      `)
+      .eq('is_featured', true)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return (data || []).map((item: any) => ({
+      id: item.id,
+      slug: item.slug,
+      name: item.name,
+      description: item.description,
+      image: item.image,
+      products: item.collection_products?.map((cp: any) => transformProduct(cp.product)) || [],
+      productCount: item.collection_products?.length || 0,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+    }));
+  } catch (error) {
+    console.error('Error fetching featured collections:', error);
+    return [];
+  }
+}
+
+export async function getAllCollections(): Promise<Collection[]> {
+  try {
+    const { data, error } = await supabase
+      .from('collections')
+      .select(`
+        *,
+        collection_products(count)
+      `)
+      .order('name');
+
+    if (error) throw error;
+
+    return (data || []).map((item: any) => ({
+      id: item.id,
+      slug: item.slug,
+      name: item.name,
+      description: item.description,
+      image: item.image,
+      products: [],
+      productCount: item.collection_products?.[0]?.count || 0,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+    }));
+  } catch (error) {
+    console.error('Error fetching all collections:', error);
+    return [];
+  }
+}
+
+export async function getCollectionBySlug(slug: string): Promise<Collection | null> {
+  try {
+    const { data, error } = await supabase
+      .from('collections')
+      .select(`
+        *,
+        collection_products(
+          product:products(
+            id,
+            slug,
+            name,
+            price,
+            original_price,
+            images,
+            brand:brands(name, slug),
+            rating,
+            review_count,
+            stock,
+            category:categories(name)
+          )
+        )
+      `)
+      .eq('slug', slug)
+      .single();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      slug: data.slug,
+      name: data.name,
+      description: data.description,
+      image: data.image,
+      products: data.collection_products?.map((cp: any) => transformProduct(cp.product)) || [],
+      productCount: data.collection_products?.length || 0,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  } catch (error) {
+    console.error('Error fetching collection by slug:', error);
+    return null;
+  }
+}
+
+export async function getCollectionProducts(
+  collectionId: string,
+  page: number = 1,
+  pageSize: number = 24
+): Promise<{ products: Product[]; total: number }> {
+  try {
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, count, error } = await supabase
+      .from('collection_products')
+      .select(`
+        product:products(
+          *,
+          brand:brands(*),
+          category:categories(*),
+          variants:product_variants(*)
+        )
+      `, { count: 'exact' })
+      .eq('collection_id', collectionId)
+      .range(from, to);
+
+    if (error) throw error;
+
+    const products = (data || []).map((item: any) => transformProduct(item.product));
+
+    return { products, total: count || 0 };
+  } catch (error) {
+    console.error('Error fetching collection products:', error);
+    return { products: [], total: 0 };
+  }
+}
+
+function transformProduct(data: any): Product {
+  if (!data) return {} as Product;
+
+  return {
+    id: data.id,
+    slug: data.slug,
+    name: data.name,
+    description: data.description || '',
+    price: parseFloat(data.price),
+    originalPrice: data.original_price ? parseFloat(data.original_price) : undefined,
+    sku: data.sku,
+    brand: {
+      id: data.brand?.id || '',
+      slug: data.brand?.slug || '',
+      name: data.brand?.name || '',
+      logo: data.brand?.logo || '',
+      productCount: data.brand?.product_count || 0,
+    },
+    category: {
+      id: data.category?.id || '',
+      slug: data.category?.slug || '',
+      name: data.category?.name || '',
+      productCount: data.category?.product_count || 0,
+    },
+    images: data.images || [],
+    variants: data.variants?.map((v: any) => ({
+      id: v.id,
+      name: v.name,
+      price: parseFloat(v.price),
+      originalPrice: v.original_price ? parseFloat(v.original_price) : undefined,
+      sku: v.sku,
+      stock: v.stock,
+      attributes: v.attributes || {},
+    })) || [],
+    specifications: data.specifications || {},
+    rating: parseFloat(data.rating) || 0,
+    reviewCount: data.review_count || 0,
+    stock: data.stock || 0,
+    isFeatured: data.is_featured || false,
+    isDeal: data.is_deal || false,
+    dealEndsAt: data.deal_ends_at,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}

@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: xarastore-development
+nameSuffix: -dev
+commonLabels:
+  environment: development
+  branch: main
+patchesStrategicMerge:
+  - deployment-patch.yaml
+  - configmap-patch.yaml
+resources:
+  - ../../base
+images:
+  - name: xarastore
+    newName: ghcr.io/xarastore/xarastore-app
+    newTag: development
+configMapGenerator:
+  - name: xarastore-config
+    behavior: merge
+    literals:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - SENTRY_ENVIRONMENT=development
+      - CORS_ORIGIN=*
+      - SERVICE_WORKER_ENABLED=false
+      - OFFLINE_MODE_ENABLED=false
+      - SECURE_COOKIES=false
+secretGenerator:
+  - name: xarastore-secrets
+    behavior: replace
+    envs:
+      - .env.development

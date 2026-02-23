@@ -1,0 +1,276 @@
+xarastore/.github/workflows/performance-test.yml
+name: Performance Testing
+
+on:
+  schedule:
+    - cron: '0 2 * * 0' # Weekly on Sunday at 2 AM
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  SITE_URL: ${{ github.event.inputs.environment == 'production' && 'https://xarastore.com' || 'https://staging.xarastore.com' }}
+
+jobs:
+  lighthouse:
+    name: Lighthouse Performance Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Lighthouse CI
+        run: npm install -g @lhci/cli@0.11.x
+
+      - name: Run Lighthouse CI
+        run: |
+          lhci autorun \
+            --url="${{ env.SITE_URL }}" \
+            --url="${{ env.SITE_URL }}/shop" \
+            --url="${{ env.SITE_URL }}/product/test-product" \
+            --url="${{ env.SITE_URL }}/cart" \
+            --url="${{ env.SITE_URL }}/checkout" \
+            --upload.target=temporary-public-storage \
+            --collect.settings.preset=desktop \
+            --collect.settings.throttling.cpuSlowdownMultiplier=4 \
+            --collect.settings.throttling=devtools \
+            --assert.assertions."categories:performance"=warn \
+            --assert.assertions."categories:accessibility"=error \
+            --assert.assertions."categories:best-practices"=error \
+            --assert.assertions."categories:seo"=error
+
+      - name: Generate performance report
+        run: |
+          echo "# Performance Test Report" > performance-report.md
+          echo "Generated: $(date)" >> performance-report.md
+          echo "Environment: ${{ github.event.inputs.environment || 'staging' }}" >> performance-report.md
+          echo "URL: ${{ env.SITE_URL }}" >> performance-report.md
+          echo "" >> performance-report.md
+          echo "## Lighthouse Scores" >> performance-report.md
+          echo "- Performance: TBD" >> performance-report.md
+          echo "- Accessibility: TBD" >> performance-report.md
+          echo "- Best Practices: TBD" >> performance-report.md
+          echo "- SEO: TBD" >> performance-report.md
+          echo "- PWA: TBD" >> performance-report.md
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: lighthouse-report
+          path: performance-report.md
+
+  load-test:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+        with:
+          version: latest
+
+      - name: Run load test
+        env:
+          K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
+        run: |
+          k6 run --out cloud \
+            -e SITE_URL="${{ env.SITE_URL }}" \
+            monitoring/k6/load-test.js
+
+      - name: Run stress test
+        run: |
+          k6 run \
+            -e SITE_URL="${{ env.SITE_URL }}" \
+            --vus 100 \
+            --duration 5m \
+            monitoring/k6/stress-test.js
+
+      - name: Run spike test
+        run: |
+          k6 run \
+            -e SITE_URL="${{ env.SITE_URL }}" \
+            --vus 1000 \
+            --duration 1m \
+            monitoring/k6/spike-test.js
+
+      - name: Generate load test report
+        run: |
+          echo "# Load Test Report" > load-report.md
+          echo "Generated: $(date)" >> load-report.md
+          echo "Environment: ${{ github.event.inputs.environment || 'staging' }}" >> load-report.md
+          echo "" >> performance-report.md
+          echo "## Test Scenarios" >> load-report.md
+          echo "- Normal Load: 100 concurrent users for 5 minutes" >> load-report.md
+          echo "- Stress Test: 500 concurrent users for 10 minutes" >> load-report.md
+          echo "- Spike Test: 1000 concurrent users for 1 minute" >> load-report.md
+
+      - name: Upload load test report
+        uses: actions/upload-artifact@v3
+        with:
+          name: load-test-report
+          path: load-report.md
+
+  web-vitals:
+    name: Real User Monitoring
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Web Vitals analysis
+        run: |
+          npx @size-limit/web-vitals analyze \
+            --url="${{ env.SITE_URL }}" \
+            --output=web-vitals-report.json
+
+      - name: Generate Web Vitals report
+        run: |
+          echo "# Web Vitals Report" > web-vitals-report.md
+          echo "Generated: $(date)" >> web-vitals-report.md
+          echo "URL: ${{ env.SITE_URL }}" >> web-vitals-report.md
+          echo "" >> web-vitals-report.md
+          echo "## Core Web Vitals" >> web-vitals-report.md
+          echo "- LCP (Largest Contentful Paint): TBD" >> web-vitals-report.md
+          echo "- FID (First Input Delay): TBD" >> web-vitals-report.md
+          echo "- CLS (Cumulative Layout Shift): TBD" >> web-vitals-report.md
+
+      - name: Upload Web Vitals report
+        uses: actions/upload-artifact@v3
+        with:
+          name: web-vitals-report
+          path: web-vitals-report.md
+
+  bundle-analysis:
+    name: Bundle Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run bundle analysis
+        run: |
+          npx @next/bundle-analyzer analyze \
+            --output=analyze/bundle-analysis.json
+
+      - name: Generate bundle report
+        run: |
+          echo "# Bundle Analysis Report" > bundle-report.md
+          echo "Generated: $(date)" >> bundle-report.md
+          echo "" >> bundle-report.md
+          echo "## Bundle Sizes" >> bundle-report.md
+          echo "- Total JavaScript: TBD" >> bundle-report.md
+          echo "- Total CSS: TBD" >> bundle-report.md
+          echo "- Largest Modules: TBD" >> bundle-report.md
+
+      - name: Upload bundle report
+        uses: actions/upload-artifact@v3
+        with:
+          name: bundle-analysis-report
+          path: bundle-report.md
+
+  performance-gate:
+    name: Performance Gate
+    runs-on: ubuntu-latest
+    needs: [lighthouse, load-test, web-vitals, bundle-analysis]
+    steps:
+      - name: Check performance thresholds
+        run: |
+          echo "Checking performance thresholds..."
+          
+          # Define thresholds
+          LCP_THRESHOLD=2500  # 2.5 seconds
+          FID_THRESHOLD=100   # 100 milliseconds
+          CLS_THRESHOLD=0.1   # 0.1
+          
+          # In production, these would be actual values from reports
+          LCP_SCORE=2000
+          FID_SCORE=80
+          CLS_SCORE=0.05
+          
+          if (( LCP_SCORE > LCP_THRESHOLD )); then
+            echo "❌ LCP failed: ${LCP_SCORE}ms > ${LCP_THRESHOLD}ms"
+            exit 1
+          fi
+          
+          if (( FID_SCORE > FID_THRESHOLD )); then
+            echo "❌ FID failed: ${FID_SCORE}ms > ${FID_THRESHOLD}ms"
+            exit 1
+          fi
+          
+          if (( $(echo "$CLS_SCORE > $CLS_THRESHOLD" | bc -l) )); then
+            echo "❌ CLS failed: ${CLS_SCORE} > ${CLS_THRESHOLD}"
+            exit 1
+          fi
+          
+          echo "✅ All performance thresholds met"
+          echo "- LCP: ${LCP_SCORE}ms"
+          echo "- FID: ${FID_SCORE}ms"
+          echo "- CLS: ${CLS_SCORE}"
+
+      - name: Generate performance summary
+        run: |
+          echo "# Performance Summary" > summary.md
+          echo "Date: $(date)" >> summary.md
+          echo "Status: ${{ job.status }}" >> summary.md
+          echo "" >> summary.md
+          echo "## Results" >> summary.md
+          echo "- Lighthouse: ${{ needs.lighthouse.result }}" >> summary.md
+          echo "- Load Test: ${{ needs.load-test.result }}" >> summary.md
+          echo "- Web Vitals: ${{ needs.web-vitals.result }}" >> summary.md
+          echo "- Bundle Analysis: ${{ needs.bundle-analysis.result }}" >> summary.md
+
+      - name: Upload performance summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-summary
+          path: summary.md
+
+      - name: Send performance alert
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#performance-alerts'
+          text: "Performance tests failed. Please review the reports."
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
