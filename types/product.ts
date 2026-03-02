@@ -826,3 +826,53 @@ export interface ProductSyncResult {
   completedAt: string;
   summary: Record<string, number>;
 }
+
+
+
+
+
+export interface Product {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  price: number;
+  originalPrice?: number | null;
+  sku: string;
+  brand: {
+    id: string;
+    slug: string;
+    name: string;
+    logo?: string;
+    productCount: number;
+  };
+  category: {
+    id: string;
+    slug: string;
+    name: string;
+    productCount: number;
+  };
+  images: string[];
+  variants: ProductVariant[];
+  specifications: Record<string, string>;
+  rating: number;
+  reviewCount: number;
+  stock: number;
+  isFeatured: boolean;
+  isDeal: boolean;
+  dealEndsAt?: string | null;
+  allowPreorder?: boolean;
+  estimatedRestockDate?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  name: string;
+  price: number;
+  originalPrice?: number | null;
+  sku: string;
+  stock: number;
+  attributes: Record<string, string>;
+}

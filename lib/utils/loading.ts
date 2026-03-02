@@ -1,5 +1,5 @@
 import { headers } from 'next/headers';
-import { supabase } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/supabase/auth';
 
 export async function getRouteInfo() {
@@ -8,11 +8,10 @@ export async function getRouteInfo() {
   const searchParams = headersList.get('x-invoke-query') || '';
   const userAgent = headersList.get('user-agent') || '';
   const connection = headersList.get('connection') || '';
-  
-  // Extract route segments
+
   const segments = pathname.split('/').filter(Boolean);
   const routeType = determineRouteType(pathname, segments);
-  
+
   return {
     pathname,
     segments,
@@ -30,58 +29,19 @@ export async function getRouteInfo() {
 }
 
 function determineRouteType(pathname: string, segments: string[]) {
-  if (pathname === '/') {
-    return { type: 'home', subType: null };
-  }
-  
-  if (pathname.startsWith('/product/')) {
-    return { type: 'product', subType: 'detail' };
-  }
-  
-  if (pathname.startsWith('/category/')) {
-    return { type: 'category', subType: segments[1] || 'list' };
-  }
-  
-  if (pathname.startsWith('/shop')) {
-    return { type: 'shop', subType: 'listing' };
-  }
-  
-  if (pathname.startsWith('/cart')) {
-    return { type: 'cart', subType: 'view' };
-  }
-  
-  if (pathname.startsWith('/checkout')) {
-    return { type: 'checkout', subType: getCheckoutStep(pathname) };
-  }
-  
-  if (pathname.startsWith('/account')) {
-    return { type: 'account', subType: segments[1] || 'overview' };
-  }
-  
-  if (pathname.startsWith('/search')) {
-    return { type: 'search', subType: 'results' };
-  }
-  
-  if (pathname.startsWith('/deals')) {
-    return { type: 'deals', subType: segments[1] || 'list' };
-  }
-  
-  if (pathname.startsWith('/brands/')) {
-    return { type: 'brand', subType: 'detail' };
-  }
-  
-  if (pathname.startsWith('/collections/')) {
-    return { type: 'collection', subType: 'detail' };
-  }
-  
-  if (pathname.startsWith('/help')) {
-    return { type: 'help', subType: segments[1] || 'index' };
-  }
-  
-  if (pathname.startsWith('/legal')) {
-    return { type: 'legal', subType: segments[1] || 'index' };
-  }
-  
+  if (pathname === '/') return { type: 'home', subType: null };
+  if (pathname.startsWith('/product/')) return { type: 'product', subType: 'detail' };
+  if (pathname.startsWith('/category/')) return { type: 'category', subType: segments[1] || 'list' };
+  if (pathname.startsWith('/shop')) return { type: 'shop', subType: 'listing' };
+  if (pathname.startsWith('/cart')) return { type: 'cart', subType: 'view' };
+  if (pathname.startsWith('/checkout')) return { type: 'checkout', subType: getCheckoutStep(pathname) };
+  if (pathname.startsWith('/account')) return { type: 'account', subType: segments[1] || 'overview' };
+  if (pathname.startsWith('/search')) return { type: 'search', subType: 'results' };
+  if (pathname.startsWith('/deals')) return { type: 'deals', subType: segments[1] || 'list' };
+  if (pathname.startsWith('/brands/')) return { type: 'brand', subType: 'detail' };
+  if (pathname.startsWith('/collections/')) return { type: 'collection', subType: 'detail' };
+  if (pathname.startsWith('/help')) return { type: 'help', subType: segments[1] || 'index' };
+  if (pathname.startsWith('/legal')) return { type: 'legal', subType: segments[1] || 'index' };
   return { type: 'generic', subType: null };
 }
 
@@ -95,23 +55,10 @@ function getCheckoutStep(pathname: string): string {
 
 function extractParams(pathname: string, segments: string[]): Record<string, string> {
   const params: Record<string, string> = {};
-  
-  if (pathname.startsWith('/product/') && segments[1]) {
-    params.slug = segments[1];
-  }
-  
-  if (pathname.startsWith('/category/') && segments[1]) {
-    params.slug = segments[1];
-  }
-  
-  if (pathname.startsWith('/brands/') && segments[1]) {
-    params.slug = segments[1];
-  }
-  
-  if (pathname.startsWith('/collections/') && segments[1]) {
-    params.slug = segments[1];
-  }
-  
+  if (pathname.startsWith('/product/') && segments[1]) params.slug = segments[1];
+  if (pathname.startsWith('/category/') && segments[1]) params.slug = segments[1];
+  if (pathname.startsWith('/brands/') && segments[1]) params.slug = segments[1];
+  if (pathname.startsWith('/collections/') && segments[1]) params.slug = segments[1];
   return params;
 }
 
@@ -158,18 +105,18 @@ function getLoadingMessage(routeType: any, segments: string[], searchQuery: stri
     legal: 'Loading legal documents…',
     generic: 'Loading page content…',
   };
-  
-  const key = routeType.subType 
+
+  const key = routeType.subType
     ? `${routeType.type}_${routeType.subType}`
     : routeType.type;
-  
+
   return messages[key] || messages.generic;
 }
 
 function getLoadingHint(routeType: any, searchParams: string, userAgent: string): string {
   const isMobile = userAgent.includes('Mobile') || userAgent.includes('Android') || userAgent.includes('iPhone');
   const mobileHint = isMobile ? ' (Optimized for mobile)' : '';
-  
+
   const hints: Record<string, string> = {
     product: `Loading product images, specifications, and reviews${mobileHint}…`,
     category: `Applying filters and sorting products${mobileHint}…`,
@@ -181,52 +128,43 @@ function getLoadingHint(routeType: any, searchParams: string, userAgent: string)
     account_wishlist: `Loading all your saved items${mobileHint}…`,
     cart: `Updating cart totals and availability${mobileHint}…`,
   };
-  
-  const key = routeType.subType 
+
+  const key = routeType.subType
     ? `${routeType.type}_${routeType.subType}`
     : routeType.type;
-  
+
   return hints[key] || `Just a moment, we are preparing everything${mobileHint}…`;
 }
 
 export async function getRouteLoadingData(routeInfo: any) {
   try {
+    const supabase = await createClient();
     const user = await getCurrentUser();
     const userId = user?.id;
-    
+
     switch (routeInfo.type) {
       case 'product':
-        return await getProductLoadingData(routeInfo.params.slug, userId);
-      
+        return await getProductLoadingData(supabase, routeInfo.params.slug, userId);
       case 'category':
-        return await getCategoryLoadingData(routeInfo.params.slug);
-      
+        return await getCategoryLoadingData(supabase, routeInfo.params.slug);
       case 'cart':
-        return await getCartLoadingData(userId);
-      
+        return await getCartLoadingData(supabase, userId);
       case 'checkout':
-        return await getCheckoutLoadingData(userId);
-      
+        return await getCheckoutLoadingData(supabase, userId);
       case 'account':
-        return await getAccountLoadingData(userId, routeInfo.subType);
-      
+        return await getAccountLoadingData(supabase, userId, routeInfo.subType);
       case 'search':
-        return await getSearchLoadingData(routeInfo.searchQuery);
-      
+        return await getSearchLoadingData(supabase, routeInfo.searchQuery);
       case 'deals':
-        return await getDealsLoadingData();
-      
+        return await getDealsLoadingData(supabase);
       case 'brand':
-        return await getBrandLoadingData(routeInfo.params.slug);
-      
+        return await getBrandLoadingData(supabase, routeInfo.params.slug);
       case 'collection':
-        return await getCollectionLoadingData(routeInfo.params.slug);
-      
+        return await getCollectionLoadingData(supabase, routeInfo.params.slug);
       case 'home':
-        return await getHomeLoadingData(userId);
-      
+        return await getHomeLoadingData(supabase, userId);
       default:
-        return await getGenericLoadingData();
+        return await getGenericLoadingData(supabase);
     }
   } catch (error) {
     console.error('Error loading route data:', error);
@@ -234,8 +172,7 @@ export async function getRouteLoadingData(routeInfo: any) {
   }
 }
 
-async function getProductLoadingData(slug: string, userId?: string) {
-  // Fetch product basic info
+async function getProductLoadingData(supabase: any, slug: string, userId?: string) {
   const { data: product, error } = await supabase
     .from('products')
     .select('id, name, stock, rating, review_count')
@@ -244,24 +181,21 @@ async function getProductLoadingData(slug: string, userId?: string) {
 
   if (error) throw error;
 
-  // Fetch variants in parallel
   const variantsPromise = supabase
     .from('product_variants')
     .select('id, name, stock')
     .eq('product_id', product.id)
     .gt('stock', 0);
 
-  // Fetch reviews count
   const reviewsPromise = supabase
     .from('reviews')
     .select('id', { count: 'exact' })
     .eq('product_id', product.id);
 
-  // Fetch related products count
   const relatedPromise = supabase
     .from('products')
     .select('id', { count: 'exact' })
-    .eq('category_id', 
+    .eq('category_id',
       supabase
         .from('products')
         .select('category_id')
@@ -271,13 +205,14 @@ async function getProductLoadingData(slug: string, userId?: string) {
     .neq('id', product.id)
     .gt('stock', 0);
 
-  // Fetch user-specific data if logged in
-  const userDataPromise = userId ? supabase
-    .from('wishlist')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('product_id', product.id)
-    .single() : Promise.resolve({ data: null });
+  const userDataPromise = userId
+    ? supabase
+        .from('wishlist')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('product_id', product.id)
+        .single()
+    : Promise.resolve({ data: null });
 
   const [variantsResult, reviewsResult, relatedResult, userDataResult] = await Promise.all([
     variantsPromise,
@@ -307,8 +242,7 @@ async function getProductLoadingData(slug: string, userId?: string) {
   };
 }
 
-async function getCategoryLoadingData(slug: string) {
-  // Get category info
+async function getCategoryLoadingData(supabase: any, slug: string) {
   const { data: category, error: categoryError } = await supabase
     .from('categories')
     .select('id, name, product_count, parent_id')
@@ -317,31 +251,27 @@ async function getCategoryLoadingData(slug: string) {
 
   if (categoryError) throw categoryError;
 
-  // Get filters
   const filtersPromise = supabase
     .from('category_filters')
     .select('filter_type, filter_values')
     .eq('category_id', category.id);
 
-  // Get subcategories
   const subcategoriesPromise = supabase
     .from('categories')
     .select('id, name, product_count')
     .eq('parent_id', category.id);
 
-  // Get brands in this category
   const brandsPromise = supabase
     .from('products')
     .select('brand_id', { count: 'exact' })
     .eq('category_id', category.id)
-    .then(result => 
+    .then((result: any) =>
       supabase
         .from('brands')
         .select('id, name')
-        .in('id', result.data?.map(p => p.brand_id) || [])
+        .in('id', result.data?.map((p: any) => p.brand_id) || [])
     );
 
-  // Get price range
   const priceRangePromise = supabase
     .from('products')
     .select('price')
@@ -356,19 +286,14 @@ async function getCategoryLoadingData(slug: string) {
     .order('price', { ascending: false })
     .limit(1);
 
-  const [
-    filtersResult,
-    subcategoriesResult,
-    brandsResult,
-    priceRangeMinResult,
-    priceRangeMaxResult,
-  ] = await Promise.all([
-    filtersPromise,
-    subcategoriesPromise,
-    brandsPromise,
-    priceRangePromise,
-    priceRangeMaxPromise,
-  ]);
+  const [filtersResult, subcategoriesResult, brandsResult, priceRangeMinResult, priceRangeMaxResult] =
+    await Promise.all([
+      filtersPromise,
+      subcategoriesPromise,
+      brandsPromise,
+      priceRangePromise,
+      priceRangeMaxPromise,
+    ]);
 
   const minPrice = priceRangeMinResult.data?.[0]?.price || 0;
   const maxPrice = priceRangeMaxResult.data?.[0]?.price || 100000;
@@ -394,13 +319,12 @@ async function getCategoryLoadingData(slug: string) {
   };
 }
 
-async function getCartLoadingData(userId?: string) {
-  let cartItems = [];
+async function getCartLoadingData(supabase: any, userId?: string) {
+  let cartItems: any[] = [];
   let cartTotal = 0;
   let itemCount = 0;
 
   if (userId) {
-    // Fetch from server cart
     const { data: serverCart } = await supabase
       .from('user_carts')
       .select('items')
@@ -410,11 +334,10 @@ async function getCartLoadingData(userId?: string) {
     if (serverCart?.items) {
       cartItems = serverCart.items;
       itemCount = serverCart.items.length;
-      
-      // Calculate total
+
       const productIds = serverCart.items.map((item: any) => item.product_id);
       const variantIds = serverCart.items.map((item: any) => item.variant_id);
-      
+
       if (productIds.length > 0) {
         const { data: products } = await supabase
           .from('products')
@@ -427,18 +350,19 @@ async function getCartLoadingData(userId?: string) {
           .in('id', variantIds);
 
         cartTotal = serverCart.items.reduce((total: number, item: any) => {
-          const product = products?.find(p => p.id === item.product_id);
-          const variant = variants?.find(v => v.id === item.variant_id);
+          const product = products?.find((p: any) => p.id === item.product_id);
+          const variant = variants?.find((v: any) => v.id === item.variant_id);
           const price = variant?.price || product?.price || 0;
-          return total + (price * item.quantity);
+          return total + price * item.quantity;
         }, 0);
       }
     }
   } else {
-    // Try to get from localStorage via headers (in real implementation, this would be handled differently)
     const headersList = await headers();
-    const cartCookie = headersList.get('cookie')?.match(/(?:^|;)\s*xarastore-cart=([^;]+)/)?.[1];
-    
+    const cartCookie = headersList
+      .get('cookie')
+      ?.match(/(?:^|;)\s*xarastore-cart=([^;]+)/)?.[1];
+
     if (cartCookie) {
       try {
         const cartData = JSON.parse(decodeURIComponent(cartCookie));
@@ -451,7 +375,6 @@ async function getCartLoadingData(userId?: string) {
     }
   }
 
-  // Check for available coupons
   const couponsPromise = supabase
     .from('coupons')
     .select('id, code, discount_type, discount_value, min_purchase')
@@ -459,26 +382,20 @@ async function getCartLoadingData(userId?: string) {
     .lte('min_purchase', cartTotal)
     .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
 
-  // Check stock availability
-  const stockCheckPromise = cartItems.length > 0 ? 
-    supabase
-      .from('product_variants')
-      .select('id, stock')
-      .in('id', cartItems.map((item: any) => item.variant_id)) : 
-    Promise.resolve({ data: [] });
+  const stockCheckPromise =
+    cartItems.length > 0
+      ? supabase
+          .from('product_variants')
+          .select('id, stock')
+          .in('id', cartItems.map((item: any) => item.variant_id))
+      : Promise.resolve({ data: [] });
 
-  const [couponsResult, stockResult] = await Promise.all([
-    couponsPromise,
-    stockCheckPromise,
-  ]);
+  const [couponsResult, stockResult] = await Promise.all([couponsPromise, stockCheckPromise]);
 
-  const availableCoupons = couponsResult.data?.filter(coupon => 
-    cartTotal >= coupon.min_purchase
-  ) || [];
+  const availableCoupons =
+    couponsResult.data?.filter((coupon: any) => cartTotal >= coupon.min_purchase) || [];
 
-  const outOfStockItems = stockResult.data?.filter(item => 
-    item.stock === 0
-  ).length || 0;
+  const outOfStockItems = stockResult.data?.filter((item: any) => item.stock === 0).length || 0;
 
   return {
     loadingItems: cartItems.length > 0,
@@ -494,7 +411,7 @@ async function getCartLoadingData(userId?: string) {
   };
 }
 
-async function getCheckoutLoadingData(userId?: string) {
+async function getCheckoutLoadingData(supabase: any, userId?: string) {
   const data: any = {
     loadingAddresses: false,
     loadingShipping: false,
@@ -505,20 +422,17 @@ async function getCheckoutLoadingData(userId?: string) {
   };
 
   if (userId) {
-    // Load user addresses
     const addressesPromise = supabase
       .from('user_addresses')
       .select('id', { count: 'exact' })
       .eq('user_id', userId);
 
-    // Load saved payment methods
     const paymentsPromise = supabase
       .from('user_payment_methods')
       .select('id', { count: 'exact' })
       .eq('user_id', userId)
       .eq('is_active', true);
 
-    // Load shipping options
     const shippingPromise = supabase
       .from('shipping_options')
       .select('id', { count: 'exact' })
@@ -539,7 +453,6 @@ async function getCheckoutLoadingData(userId?: string) {
     data.loadingShipping = shippingResult.count > 0;
     data.shippingOptions = shippingResult.count || 0;
 
-    // Check if user has default address
     if (addressesResult.count > 0) {
       const { data: defaultAddress } = await supabase
         .from('user_addresses')
@@ -547,24 +460,19 @@ async function getCheckoutLoadingData(userId?: string) {
         .eq('user_id', userId)
         .eq('is_default', true)
         .single();
-      
       data.hasDefaultAddress = !!defaultAddress;
     }
   }
 
-  // Always load M-Pesa as available payment method
-  data.paymentMethods += 1; // M-Pesa
+  data.paymentMethods += 1;
   data.loadingPaymentMethods = true;
 
-  // Get available countries for shipping
-  const countriesPromise = supabase
+  const countriesResult = await supabase
     .from('shipping_countries')
     .select('country_code', { count: 'exact' })
     .eq('is_active', true);
 
-  const countriesResult = await countriesPromise;
   data.shippingCountries = countriesResult.count || 0;
-
   data.estimatedLoadTime = calculateCheckoutLoadTime(
     data.addressCount,
     data.paymentMethods,
@@ -575,7 +483,7 @@ async function getCheckoutLoadingData(userId?: string) {
   return data;
 }
 
-async function getAccountLoadingData(userId?: string, subType?: string) {
+async function getAccountLoadingData(supabase: any, userId?: string, subType?: string) {
   if (!userId) {
     return {
       isAuthenticated: false,
@@ -588,12 +496,8 @@ async function getAccountLoadingData(userId?: string, subType?: string) {
   }
 
   const promises: Promise<any>[] = [];
-  const data: any = {
-    isAuthenticated: true,
-    userId,
-  };
+  const data: any = { isAuthenticated: true, userId };
 
-  // Always load basic profile
   const profilePromise = supabase
     .from('users')
     .select('full_name, email, phone, avatar_url, created_at')
@@ -601,45 +505,35 @@ async function getAccountLoadingData(userId?: string, subType?: string) {
     .single();
   promises.push(profilePromise);
 
-  // Load based on subType
   switch (subType) {
     case 'orders':
-      const ordersPromise = supabase
-        .from('orders')
-        .select('id', { count: 'exact' })
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-      promises.push(ordersPromise);
+      promises.push(
+        supabase
+          .from('orders')
+          .select('id', { count: 'exact' })
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+      );
       data.loadingOrders = true;
       break;
-
     case 'wishlist':
-      const wishlistPromise = supabase
-        .from('wishlist')
-        .select('id', { count: 'exact' })
-        .eq('user_id', userId);
-      promises.push(wishlistPromise);
+      promises.push(
+        supabase.from('wishlist').select('id', { count: 'exact' }).eq('user_id', userId)
+      );
       data.loadingWishlist = true;
       break;
-
     case 'wardrobe':
-      const wardrobePromise = supabase
-        .from('user_wardrobe')
-        .select('id', { count: 'exact' })
-        .eq('user_id', userId);
-      promises.push(wardrobePromise);
+      promises.push(
+        supabase.from('user_wardrobe').select('id', { count: 'exact' }).eq('user_id', userId)
+      );
       data.loadingWardrobe = true;
       break;
-
     case 'addresses':
-      const addressesPromise = supabase
-        .from('user_addresses')
-        .select('id', { count: 'exact' })
-        .eq('user_id', userId);
-      promises.push(addressesPromise);
+      promises.push(
+        supabase.from('user_addresses').select('id', { count: 'exact' }).eq('user_id', userId)
+      );
       data.loadingAddresses = true;
       break;
-
     case 'profile':
       data.loadingProfile = true;
       break;
@@ -647,7 +541,6 @@ async function getAccountLoadingData(userId?: string, subType?: string) {
 
   const results = await Promise.all(promises);
 
-  // Process results
   if (results[0].data) {
     const profile = results[0].data;
     data.userName = profile.full_name;
@@ -656,21 +549,10 @@ async function getAccountLoadingData(userId?: string, subType?: string) {
     data.loadingProfile = true;
   }
 
-  if (subType === 'orders' && results[1]) {
-    data.orderCount = results[1].count || 0;
-  }
-
-  if (subType === 'wishlist' && results[1]) {
-    data.wishlistCount = results[1].count || 0;
-  }
-
-  if (subType === 'wardrobe' && results[1]) {
-    data.wardrobeCount = results[1].count || 0;
-  }
-
-  if (subType === 'addresses' && results[1]) {
-    data.addressCount = results[1].count || 0;
-  }
+  if (subType === 'orders' && results[1]) data.orderCount = results[1].count || 0;
+  if (subType === 'wishlist' && results[1]) data.wishlistCount = results[1].count || 0;
+  if (subType === 'wardrobe' && results[1]) data.wardrobeCount = results[1].count || 0;
+  if (subType === 'addresses' && results[1]) data.addressCount = results[1].count || 0;
 
   data.estimatedLoadTime = calculateAccountLoadTime(subType);
   data.timestamp = Date.now();
@@ -678,7 +560,7 @@ async function getAccountLoadingData(userId?: string, subType?: string) {
   return data;
 }
 
-async function getSearchLoadingData(query: string) {
+async function getSearchLoadingData(supabase: any, query: string) {
   if (!query) {
     return {
       query: '',
@@ -690,14 +572,12 @@ async function getSearchLoadingData(query: string) {
     };
   }
 
-  // Get search results count
   const resultsPromise = supabase
     .from('products')
     .select('id', { count: 'exact' })
     .or(`name.ilike.%${query}%,description.ilike.%${query}%,sku.ilike.%${query}%`)
     .gt('stock', 0);
 
-  // Get search suggestions
   const suggestionsPromise = supabase
     .from('search_suggestions')
     .select('suggestion, search_count')
@@ -705,7 +585,6 @@ async function getSearchLoadingData(query: string) {
     .order('search_count', { ascending: false })
     .limit(5);
 
-  // Get search filters
   const filtersPromise = supabase
     .from('search_filters')
     .select('filter_type, filter_values')
@@ -724,37 +603,38 @@ async function getSearchLoadingData(query: string) {
     suggestionCount: suggestionsResult.data?.length || 0,
     loadingFilters: filtersResult.data?.length > 0,
     filterCount: filtersResult.data?.length || 0,
-    popularQueries: suggestionsResult.data?.map(s => s.suggestion) || [],
+    popularQueries: suggestionsResult.data?.map((s: any) => s.suggestion) || [],
     estimatedLoadTime: calculateSearchLoadTime(resultsResult.count || 0),
     timestamp: Date.now(),
   };
 }
 
-async function getDealsLoadingData() {
-  // Get active deals count
+async function getDealsLoadingData(supabase: any) {
+  const now = new Date().toISOString();
+  const in24h = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const in3d = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+
   const dealsPromise = supabase
     .from('products')
     .select('id', { count: 'exact' })
     .eq('is_deal', true)
     .gt('stock', 0)
-    .or(`deal_ends_at.is.null,deal_ends_at.gt.${new Date().toISOString()}`);
+    .or(`deal_ends_at.is.null,deal_ends_at.gt.${now}`);
 
-  // Get flash deals
   const flashDealsPromise = supabase
     .from('products')
     .select('id', { count: 'exact' })
     .eq('is_deal', true)
     .gt('stock', 0)
-    .lte('deal_ends_at', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+    .lte('deal_ends_at', in24h);
 
-  // Get ending soon deals
   const endingSoonPromise = supabase
     .from('products')
     .select('id', { count: 'exact' })
     .eq('is_deal', true)
     .gt('stock', 0)
     .not('deal_ends_at', 'is', null)
-    .lte('deal_ends_at', new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString());
+    .lte('deal_ends_at', in3d);
 
   const [dealsResult, flashDealsResult, endingSoonResult] = await Promise.all([
     dealsPromise,
@@ -777,7 +657,7 @@ async function getDealsLoadingData() {
   };
 }
 
-async function getBrandLoadingData(slug: string) {
+async function getBrandLoadingData(supabase: any, slug: string) {
   const { data: brand, error } = await supabase
     .from('brands')
     .select('id, name, product_count, description')
@@ -786,14 +666,12 @@ async function getBrandLoadingData(slug: string) {
 
   if (error) throw error;
 
-  // Get brand products count by category
   const categoriesPromise = supabase
     .from('products')
     .select('category_id', { count: 'exact' })
     .eq('brand_id', brand.id)
     .group('category_id');
 
-  // Get featured products count
   const featuredPromise = supabase
     .from('products')
     .select('id', { count: 'exact' })
@@ -819,7 +697,7 @@ async function getBrandLoadingData(slug: string) {
   };
 }
 
-async function getCollectionLoadingData(slug: string) {
+async function getCollectionLoadingData(supabase: any, slug: string) {
   const { data: collection, error } = await supabase
     .from('collections')
     .select('id, name, description, product_count')
@@ -828,18 +706,17 @@ async function getCollectionLoadingData(slug: string) {
 
   if (error) throw error;
 
-  // Get collection products preview
   const productsPromise = supabase
     .from('collection_products')
     .select('product_id')
     .eq('collection_id', collection.id)
     .limit(8);
 
-  // Get collection categories
   const categoriesPromise = supabase
     .from('products')
     .select('category_id')
-    .in('id', 
+    .in(
+      'id',
       supabase
         .from('collection_products')
         .select('product_id')
@@ -865,39 +742,37 @@ async function getCollectionLoadingData(slug: string) {
   };
 }
 
-async function getHomeLoadingData(userId?: string) {
-  // Get featured products count
+async function getHomeLoadingData(supabase: any, userId?: string) {
   const featuredPromise = supabase
     .from('products')
     .select('id', { count: 'exact' })
     .eq('is_featured', true)
     .gt('stock', 0);
 
-  // Get deals count
   const dealsPromise = supabase
     .from('products')
     .select('id', { count: 'exact' })
     .eq('is_deal', true)
     .gt('stock', 0);
 
-  // Get categories count
   const categoriesPromise = supabase
     .from('categories')
     .select('id', { count: 'exact' })
     .is('parent_id', null);
 
-  // Get user-specific data if logged in
-  const userDataPromise = userId ? Promise.all([
-    supabase
-      .from('wishlist')
-      .select('id', { count: 'exact' })
-      .eq('user_id', userId),
-    supabase
-      .from('orders')
-      .select('id', { count: 'exact' })
-      .eq('user_id', userId)
-      .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
-  ]) : Promise.resolve([{ count: 0 }, { count: 0 }]);
+  const userDataPromise = userId
+    ? Promise.all([
+        supabase.from('wishlist').select('id', { count: 'exact' }).eq('user_id', userId),
+        supabase
+          .from('orders')
+          .select('id', { count: 'exact' })
+          .eq('user_id', userId)
+          .gte(
+            'created_at',
+            new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+          ),
+      ])
+    : Promise.resolve([{ count: 0 }, { count: 0 }]);
 
   const [featuredResult, dealsResult, categoriesResult, userDataResults] = await Promise.all([
     featuredPromise,
@@ -927,16 +802,13 @@ async function getHomeLoadingData(userId?: string) {
   };
 }
 
-async function getGenericLoadingData() {
-  // Get overall site stats
-  const statsPromise = Promise.all([
+async function getGenericLoadingData(supabase: any) {
+  const [productsResult, categoriesResult, brandsResult, usersResult] = await Promise.all([
     supabase.from('products').select('id', { count: 'exact' }).gt('stock', 0),
     supabase.from('categories').select('id', { count: 'exact' }),
     supabase.from('brands').select('id', { count: 'exact' }),
     supabase.from('users').select('id', { count: 'exact' }),
   ]);
-
-  const [productsResult, categoriesResult, brandsResult, usersResult] = await statsPromise;
 
   return {
     totalProducts: productsResult.count || 0,
@@ -951,123 +823,52 @@ async function getGenericLoadingData() {
 
 function getFallbackLoadingData(type: string) {
   const fallbacks: Record<string, any> = {
-    product: {
-      productId: null,
-      loadingVariants: true,
-      loadingReviews: true,
-      loadingRelated: true,
-      estimatedLoadTime: 2000,
-      timestamp: Date.now(),
-    },
-    category: {
-      categoryId: null,
-      loadingFilters: true,
-      loadingProducts: true,
-      estimatedCount: 0,
-      estimatedLoadTime: 1500,
-      timestamp: Date.now(),
-    },
-    cart: {
-      loadingItems: true,
-      loadingTotals: true,
-      loadingCoupons: true,
-      estimatedLoadTime: 1000,
-      timestamp: Date.now(),
-    },
-    checkout: {
-      loadingAddresses: true,
-      loadingShipping: true,
-      loadingPaymentMethods: true,
-      estimatedLoadTime: 1500,
-      timestamp: Date.now(),
-    },
-    account: {
-      loadingProfile: true,
-      loadingOrders: true,
-      loadingWishlist: true,
-      estimatedLoadTime: 1200,
-      timestamp: Date.now(),
-    },
+    product: { productId: null, loadingVariants: true, loadingReviews: true, loadingRelated: true, estimatedLoadTime: 2000, timestamp: Date.now() },
+    category: { categoryId: null, loadingFilters: true, loadingProducts: true, estimatedCount: 0, estimatedLoadTime: 1500, timestamp: Date.now() },
+    cart: { loadingItems: true, loadingTotals: true, loadingCoupons: true, estimatedLoadTime: 1000, timestamp: Date.now() },
+    checkout: { loadingAddresses: true, loadingShipping: true, loadingPaymentMethods: true, estimatedLoadTime: 1500, timestamp: Date.now() },
+    account: { loadingProfile: true, loadingOrders: true, loadingWishlist: true, estimatedLoadTime: 1200, timestamp: Date.now() },
   };
-
-  return fallbacks[type] || {
-    loading: true,
-    estimatedLoadTime: 1000,
-    timestamp: Date.now(),
-  };
+  return fallbacks[type] || { loading: true, estimatedLoadTime: 1000, timestamp: Date.now() };
 }
 
-// Helper functions for load time estimation
 function calculateProductLoadTime(variants: number, reviews: number, related: number): number {
-  const baseTime = 800;
-  const variantTime = variants * 50;
-  const reviewTime = Math.min(reviews, 50) * 20;
-  const relatedTime = Math.min(related, 20) * 30;
-  return baseTime + variantTime + reviewTime + relatedTime;
+  return 800 + variants * 50 + Math.min(reviews, 50) * 20 + Math.min(related, 20) * 30;
 }
 
 function calculateCategoryLoadTime(products: number, filters: number, subcategories: number): number {
-  const baseTime = 700;
-  const productTime = Math.min(products, 1000) * 2;
-  const filterTime = filters * 100;
-  const subcategoryTime = subcategories * 150;
-  return baseTime + productTime + filterTime + subcategoryTime;
+  return 700 + Math.min(products, 1000) * 2 + filters * 100 + subcategories * 150;
 }
 
 function calculateCartLoadTime(items: number): number {
-  const baseTime = 600;
-  const itemTime = items * 100;
-  return baseTime + itemTime;
+  return 600 + items * 100;
 }
 
 function calculateCheckoutLoadTime(addresses: number, payments: number, shipping: number): number {
-  const baseTime = 900;
-  const addressTime = addresses * 80;
-  const paymentTime = payments * 120;
-  const shippingTime = shipping * 100;
-  return baseTime + addressTime + paymentTime + shippingTime;
+  return 900 + addresses * 80 + payments * 120 + shipping * 100;
 }
 
 function calculateAccountLoadTime(subType?: string): number {
-  const times: Record<string, number> = {
-    orders: 1200,
-    wishlist: 1000,
-    wardrobe: 1500,
-    addresses: 800,
-    profile: 600,
-  };
+  const times: Record<string, number> = { orders: 1200, wishlist: 1000, wardrobe: 1500, addresses: 800, profile: 600 };
   return times[subType || 'profile'] || 1000;
 }
 
 function calculateSearchLoadTime(results: number): number {
-  const baseTime = 800;
-  const resultTime = Math.min(results, 1000) * 1.5;
-  return baseTime + resultTime;
+  return 800 + Math.min(results, 1000) * 1.5;
 }
 
 function calculateDealsLoadTime(totalDeals: number, flashDeals: number): number {
-  const baseTime = 700;
-  const dealTime = Math.min(totalDeals, 500) * 3;
-  const flashTime = flashDeals * 150;
-  return baseTime + dealTime + flashTime;
+  return 700 + Math.min(totalDeals, 500) * 3 + flashDeals * 150;
 }
 
 function calculateBrandLoadTime(products: number): number {
-  const baseTime = 750;
-  const productTime = Math.min(products, 500) * 2.5;
-  return baseTime + productTime;
+  return 750 + Math.min(products, 500) * 2.5;
 }
 
 function calculateCollectionLoadTime(products: number): number {
-  const baseTime = 800;
-  const productTime = Math.min(products, 200) * 4;
-  return baseTime + productTime;
+  return 800 + Math.min(products, 200) * 4;
 }
 
 function calculateHomeLoadTime(featured: number, deals: number, categories: number): number {
-  const baseTime = 900;
-  const featuredTime = Math.min(featured, 20) * 40;
-  const dealTime = Math.min(deals, 20) * 35;
-  const categoryTime = Math.min(categories, 12) * 60;
-  return baseTime + featuredTime + dealTime + categoryTime;
+  return 900 + Math.min(featured, 20) * 40 + Math.min(deals, 20) * 35 + Math.min(categories, 12) * 60;
 }

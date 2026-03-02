@@ -1,15 +1,14 @@
-import { supabase } from './server';
-import { cookies } from 'next/headers';
+import { createClient } from './server';
 
 export async function getCurrentUser() {
   try {
+    const supabase = await createClient();
     const { data: { session }, error } = await supabase.auth.getSession();
-    
+
     if (error || !session) {
       return null;
     }
 
-    // Get additional user data from users table
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('*')
@@ -37,16 +36,18 @@ export async function getCurrentUser() {
 }
 
 export async function getSession() {
+  const supabase = await createClient();
   const { data: { session }, error } = await supabase.auth.getSession();
-  
+
   if (error) {
     throw error;
   }
-  
+
   return session;
 }
 
 export async function getUserRole(userId: string) {
+  const supabase = await createClient();
   const { data: user, error } = await supabase
     .from('user_roles')
     .select('role')

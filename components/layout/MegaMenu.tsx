@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ChevronDown, Sparkles, TrendingUp, Clock, Star } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
+import { ChevronDown, Sparkles, TrendingUp, Clock, Star, AlertCircle } from 'lucide-react';
 import { getCategories } from '@/lib/supabase/queries/products';
+import { logger } from '@/lib/utils/logger';
 
 interface Category {
   id: string;
@@ -15,21 +17,67 @@ export function MegaMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const loadCategories = useCallback(async () => {
+    // Cancel any in-flight requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    abortControllerRef.current = new AbortController();
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Add small delay to prevent rapid retries
+      if (retryCount > 0) {
+        await new Promise(resolve => setTimeout(resolve, Math.min(1000 * retryCount, 5000)));
+      }
+
+      const data = await getCategories();
+      
+      // Check if request was aborted
+      if (abortControllerRef.current.signal.aborted) {
+        return;
+      }
+
+      // Ensure we have valid data and limit to top 8
+      setCategories((data || []).slice(0, 8));
+      setRetryCount(0); // Reset retry count on success
+    } catch (error) {
+      // Don't log aborted requests as errors
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+
+      logger.error('Failed to load categories:', error);
+      setError(error instanceof Error ? error : new Error('Failed to load categories'));
+      setCategories([]);
+      
+      // Increment retry count for exponential backoff
+      setRetryCount(prev => Math.min(prev + 1, 3));
+    } finally {
+      if (!abortControllerRef.current?.signal.aborted) {
+        setIsLoading(false);
+      }
+    }
+  }, [retryCount]);
 
   useEffect(() => {
     loadCategories();
-  }, []);
 
-  const loadCategories = async () => {
-    try {
-      const data = await getCategories();
-      setCategories(data.slice(0, 8)); // Show top 8 categories
-    } catch (error) {
-      console.error('Failed to load categories:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    // Cleanup function to abort any pending requests
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [loadCategories]);
 
   const featuredCategories = [
     {
@@ -68,6 +116,8 @@ export function MegaMenu() {
         onMouseEnter={() => setIsOpen(true)}
         onMouseLeave={() => setIsOpen(false)}
         className="flex items-center space-x-1 font-medium text-gray-700 hover:text-red-600 transition-colors"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
       >
         <span>Categories</span>
         <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -80,133 +130,168 @@ export function MegaMenu() {
           onMouseLeave={() => setIsOpen(false)}
         >
           <div className="p-8">
-            <div className="grid grid-cols-4 gap-8">
-              {/* Categories Column */}
-              <div className="col-span-3">
-                <div className="grid grid-cols-3 gap-6">
-                  {isLoading ? (
-                    Array.from({ length: 6 }).map((_, i) => (
-                      <div key={i} className="animate-pulse">
-                        <div className="h-4 bg-gray-200 rounded w-3/4 mb-3"></div>
-                        <div className="space-y-2">
-                          {Array.from({ length: 4 }).map((_, j) => (
-                            <div key={j} className="h-3 bg-gray-100 rounded"></div>
-                          ))}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    categories.map((category) => (
-                      <div key={category.id} className="mb-6">
-                        <a
-                          href={`/category/${category.slug}`}
-                          className="font-semibold text-gray-900 hover:text-red-600 transition-colors block mb-3"
-                        >
-                          {category.name}
-                        </a>
-                        <div className="space-y-2">
-                          {[
-                            'Best Sellers',
-                            'New Arrivals',
-                            'On Sale',
-                            'Top Rated',
-                          ].map((sub) => (
-                            <a
-                              key={sub}
-                              href={`/category/${category.slug}?filter=${sub.toLowerCase().replace(' ', '-')}`}
-                              className="block text-sm text-gray-600 hover:text-red-600 transition-colors"
-                            >
-                              {sub}
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+            {error && categories.length === 0 && !isLoading ? (
+              // Error state
+              <div className="text-center py-12">
+                <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                <p className="text-gray-900 font-medium mb-2">Unable to load categories</p>
+                <p className="text-gray-500 text-sm mb-6">{error.message}</p>
+                <button
+                  onClick={loadCategories}
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Loading...' : 'Try Again'}
+                </button>
               </div>
-
-              {/* Featured Column */}
-              <div className="col-span-1 border-l border-gray-100 pl-8">
-                <h3 className="font-semibold text-gray-900 mb-6">Featured</h3>
-                <div className="space-y-4">
-                  {featuredCategories.map((feature) => {
-                    const Icon = feature.icon;
-                    return (
-                      <a
-                        key={feature.name}
-                        href={feature.href}
-                        className="block group"
-                      >
-                        <div className={`${feature.color} rounded-xl p-4 text-white transition-transform group-hover:scale-105`}>
-                          <div className="flex items-center space-x-3 mb-2">
-                            <Icon className="w-5 h-5" />
-                            <span className="font-semibold">{feature.name}</span>
+            ) : (
+              <div className="grid grid-cols-4 gap-8">
+                {/* Categories Column */}
+                <div className="col-span-3">
+                  <div className="grid grid-cols-3 gap-6">
+                    {isLoading ? (
+                      // Loading skeletons
+                      Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mb-3"></div>
+                          <div className="space-y-2">
+                            {Array.from({ length: 4 }).map((_, j) => (
+                              <div key={j} className="h-3 bg-gray-100 rounded"></div>
+                            ))}
                           </div>
-                          <p className="text-sm opacity-90">{feature.description}</p>
                         </div>
-                      </a>
-                    );
-                  })}
+                      ))
+                    ) : categories.length > 0 ? (
+                      categories.map((category) => (
+                        <div key={category.id} className="mb-6">
+                          <Link
+                            href={`/category/${category.slug}`}
+                            className="font-semibold text-gray-900 hover:text-red-600 transition-colors block mb-3"
+                            onClick={() => setIsOpen(false)}
+                          >
+                            {category.name}
+                            {category.productCount > 0 && (
+                              <span className="ml-2 text-xs text-gray-500 font-normal">
+                                ({category.productCount})
+                              </span>
+                            )}
+                          </Link>
+                          <div className="space-y-2">
+                            {[
+                              'Best Sellers',
+                              'New Arrivals',
+                              'On Sale',
+                              'Top Rated',
+                            ].map((sub) => (
+                              <Link
+                                key={sub}
+                                href={`/category/${category.slug}?filter=${sub.toLowerCase().replace(' ', '-')}`}
+                                className="block text-sm text-gray-600 hover:text-red-600 transition-colors"
+                                onClick={() => setIsOpen(false)}
+                              >
+                                {sub}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-3 text-center py-8">
+                        <p className="text-gray-500">No categories available</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Quick Links */}
-                <div className="mt-8 pt-8 border-t border-gray-100">
-                  <h4 className="font-semibold text-gray-900 mb-4">Quick Links</h4>
-                  <div className="space-y-3">
-                    <a
-                      href="/shop/all"
-                      className="flex items-center justify-between text-sm text-gray-600 hover:text-red-600 transition-colors"
-                    >
-                      <span>Shop All Products</span>
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                        10K+
-                      </span>
-                    </a>
-                    <a
-                      href="/deals"
-                      className="flex items-center justify-between text-sm text-gray-600 hover:text-red-600 transition-colors"
-                    >
-                      <span>All Deals</span>
-                      <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
-                        Hot
-                      </span>
-                    </a>
-                    <a
-                      href="/brands"
-                      className="flex items-center justify-between text-sm text-gray-600 hover:text-red-600 transition-colors"
-                    >
-                      <span>Brands A-Z</span>
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                        200+
-                      </span>
-                    </a>
+                {/* Featured Column */}
+                <div className="col-span-1 border-l border-gray-100 pl-8">
+                  <h3 className="font-semibold text-gray-900 mb-6">Featured</h3>
+                  <div className="space-y-4">
+                    {featuredCategories.map((feature) => {
+                      const Icon = feature.icon;
+                      return (
+                        <Link
+                          key={feature.name}
+                          href={feature.href}
+                          className="block group"
+                          onClick={() => setIsOpen(false)}
+                        >
+                          <div className={`${feature.color} rounded-xl p-4 text-white transition-transform group-hover:scale-105`}>
+                            <div className="flex items-center space-x-3 mb-2">
+                              <Icon className="w-5 h-5" />
+                              <span className="font-semibold">{feature.name}</span>
+                            </div>
+                            <p className="text-sm opacity-90">{feature.description}</p>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+
+                  {/* Quick Links */}
+                  <div className="mt-8 pt-8 border-t border-gray-100">
+                    <h4 className="font-semibold text-gray-900 mb-4">Quick Links</h4>
+                    <div className="space-y-3">
+                      <Link
+                        href="/shop/all"
+                        className="flex items-center justify-between text-sm text-gray-600 hover:text-red-600 transition-colors"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <span>Shop All Products</span>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                          10K+
+                        </span>
+                      </Link>
+                      <Link
+                        href="/deals"
+                        className="flex items-center justify-between text-sm text-gray-600 hover:text-red-600 transition-colors"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <span>All Deals</span>
+                        <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
+                          Hot
+                        </span>
+                      </Link>
+                      <Link
+                        href="/brands"
+                        className="flex items-center justify-between text-sm text-gray-600 hover:text-red-600 transition-colors"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <span>Brands A-Z</span>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                          200+
+                        </span>
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Bottom Banner */}
-            <div className="mt-8 pt-8 border-t border-gray-100">
-              <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-xl p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">
-                      Need help choosing?
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      Get personalized recommendations from our experts
-                    </p>
+            {/* Bottom Banner - only show if no error */}
+            {!error && (
+              <div className="mt-8 pt-8 border-t border-gray-100">
+                <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-2">
+                        Need help choosing?
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        Get personalized recommendations from our experts
+                      </p>
+                    </div>
+                    <Link
+                      href="/help/shopping-assistance"
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      Get Help
+                    </Link>
                   </div>
-                  <a
-                    href="/help/shopping-assistance"
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                  >
-                    Get Help
-                  </a>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

@@ -1,0 +1,4 @@
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://cloudconvert.com/
+HostUrl=https://eu-central.storage.cloudconvert.com/tasks/7c10dafe-3512-4876-a79e-269bf59c74e7/app-store-badge.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=cloudconvert-production%2F20260227%2Ffra%2Fs3%2Faws4_request&X-Amz-Date=20260227T172350Z&X-Amz-Expires=86400&X-Amz-Signature=a153d6c9da3e1b0e8d17379eae6a44ce7083fc0dc4de0c9f2d3e09ea87200ff5&X-Amz-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3D%22app-store-badge.png%22&response-content-type=image%2Fpng&x-id=GetObject

@@ -1,0 +1,509 @@
+import { supabase } from '@/lib/supabase/client';
+
+export interface SiteSettings {
+  id: string;
+  site_name: string;
+  site_tagline: string;
+  primary_color: string;
+  secondary_color: string;
+  logo_url: string;
+  favicon_url: string;
+  contact_email: string;
+  support_phone: string;
+  business_address: string;
+  currency: string;
+  currency_symbol: string;
+  tax_rate: number;
+  shipping_free_threshold: number;
+  shipping_standard_price: number;
+  shipping_express_price: number;
+  return_window_days: number;
+  seo_title: string;
+  seo_description: string;
+  seo_keywords: string;
+  social_facebook: string;
+  social_twitter: string;
+  social_instagram: string;
+  social_tiktok: string;
+  google_analytics_id: string;
+  facebook_pixel_id: string;
+  maintenance_mode: boolean;
+  maintenance_message: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentSettings {
+  id: string;
+  mpesa_enabled: boolean;
+  mpesa_consumer_key: string;
+  mpesa_consumer_secret: string;
+  mpesa_shortcode: string;
+  mpesa_passkey: string;
+  mpesa_environment: 'sandbox' | 'production';
+  stripe_enabled: boolean;
+  stripe_publishable_key: string;
+  stripe_secret_key: string;
+  stripe_webhook_secret: string;
+  paypal_enabled: boolean;
+  paypal_client_id: string;
+  paypal_secret_key: string;
+  bank_transfer_enabled: boolean;
+  bank_name: string;
+  bank_account_name: string;
+  bank_account_number: string;
+  bank_branch: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailSettings {
+  id: string;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_password: string;
+  smtp_encryption: 'ssl' | 'tls' | 'none';
+  from_email: string;
+  from_name: string;
+  order_confirmation_enabled: boolean;
+  order_shipped_enabled: boolean;
+  order_delivered_enabled: boolean;
+  welcome_email_enabled: boolean;
+  password_reset_enabled: boolean;
+  newsletter_enabled: boolean;
+  newsletter_from_name: string;
+  newsletter_from_email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationSettings {
+  id: string;
+  new_order_notification: boolean;
+  new_order_email: string;
+  low_stock_threshold: number;
+  low_stock_notification: boolean;
+  low_stock_email: string;
+  customer_registration_notification: boolean;
+  customer_registration_email: string;
+  review_submitted_notification: boolean;
+  review_submitted_email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+class SettingsManager {
+  private static instance: SettingsManager;
+  private cache = new Map<string, { data: any; timestamp: number }>();
+  private cacheTTL = 5 * 60 * 1000; // 5 minutes
+  private retryCount = 3;
+  private retryDelay = 1000; // 1 second
+
+  private constructor() {}
+
+  static getInstance(): SettingsManager {
+    if (!SettingsManager.instance) {
+      SettingsManager.instance = new SettingsManager();
+    }
+    return SettingsManager.instance;
+  }
+
+  private async fetchWithRetry<T>(
+    fetchFn: () => Promise<T>,
+    retries: number = this.retryCount
+  ): Promise<T> {
+    try {
+      return await fetchFn();
+    } catch (error) {
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+        return this.fetchWithRetry(fetchFn, retries - 1);
+      }
+      throw error;
+    }
+  }
+
+  async getSiteSettings(): Promise<SiteSettings> {
+    const cacheKey = 'site_settings';
+    const cached = this.getFromCache(cacheKey);
+    
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const { data, error } = await this.fetchWithRetry(() =>
+        supabase
+          .from('site_settings')
+          .select('*')
+          .maybeSingle()
+      );
+
+      if (error) {
+        console.error('Supabase error fetching site settings:', error);
+        return this.getDefaultSiteSettings();
+      }
+
+      const settings = data || await this.getDefaultSiteSettings();
+      this.setCache(cacheKey, settings);
+      
+      return settings;
+    } catch (error) {
+      console.error('Error fetching site settings:', error);
+      return this.getDefaultSiteSettings();
+    }
+  }
+
+  async getPaymentSettings(): Promise<PaymentSettings> {
+    const cacheKey = 'payment_settings';
+    const cached = this.getFromCache(cacheKey);
+    
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const { data, error } = await this.fetchWithRetry(() =>
+        supabase
+          .from('payment_settings')
+          .select('*')
+          .maybeSingle()
+      );
+
+      if (error) {
+        console.error('Supabase error fetching payment settings:', error);
+        return this.getDefaultPaymentSettings();
+      }
+
+      const settings = data || await this.getDefaultPaymentSettings();
+      this.setCache(cacheKey, settings);
+      
+      return settings;
+    } catch (error) {
+      console.error('Error fetching payment settings:', error);
+      return this.getDefaultPaymentSettings();
+    }
+  }
+
+  async getEmailSettings(): Promise<EmailSettings> {
+    const cacheKey = 'email_settings';
+    const cached = this.getFromCache(cacheKey);
+    
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const { data, error } = await this.fetchWithRetry(() =>
+        supabase
+          .from('email_settings')
+          .select('*')
+          .maybeSingle()
+      );
+
+      if (error) {
+        console.error('Supabase error fetching email settings:', error);
+        return this.getDefaultEmailSettings();
+      }
+
+      const settings = data || await this.getDefaultEmailSettings();
+      this.setCache(cacheKey, settings);
+      
+      return settings;
+    } catch (error) {
+      console.error('Error fetching email settings:', error);
+      return this.getDefaultEmailSettings();
+    }
+  }
+
+  async getNotificationSettings(): Promise<NotificationSettings> {
+    const cacheKey = 'notification_settings';
+    const cached = this.getFromCache(cacheKey);
+    
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const { data, error } = await this.fetchWithRetry(() =>
+        supabase
+          .from('notification_settings')
+          .select('*')
+          .maybeSingle()
+      );
+
+      if (error) {
+        console.error('Supabase error fetching notification settings:', error);
+        return this.getDefaultNotificationSettings();
+      }
+
+      const settings = data || await this.getDefaultNotificationSettings();
+      this.setCache(cacheKey, settings);
+      
+      return settings;
+    } catch (error) {
+      console.error('Error fetching notification settings:', error);
+      return this.getDefaultNotificationSettings();
+    }
+  }
+
+  async updateSiteSettings(settings: Partial<SiteSettings>): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('site_settings')
+        .upsert({
+          ...settings,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+
+      this.clearCache('site_settings');
+    } catch (error) {
+      console.error('Error updating site settings:', error);
+      throw error;
+    }
+  }
+
+  async updatePaymentSettings(settings: Partial<PaymentSettings>): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('payment_settings')
+        .upsert({
+          ...settings,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+
+      this.clearCache('payment_settings');
+    } catch (error) {
+      console.error('Error updating payment settings:', error);
+      throw error;
+    }
+  }
+
+  async updateEmailSettings(settings: Partial<EmailSettings>): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('email_settings')
+        .upsert({
+          ...settings,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+
+      this.clearCache('email_settings');
+    } catch (error) {
+      console.error('Error updating email settings:', error);
+      throw error;
+    }
+  }
+
+  async updateNotificationSettings(settings: Partial<NotificationSettings>): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('notification_settings')
+        .upsert({
+          ...settings,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+
+      this.clearCache('notification_settings');
+    } catch (error) {
+      console.error('Error updating notification settings:', error);
+      throw error;
+    }
+  }
+
+  async getFeatureFlags(): Promise<Record<string, boolean>> {
+    try {
+      const { data, error } = await this.fetchWithRetry(() =>
+        supabase
+          .from('feature_flags')
+          .select('*')
+      );
+
+      if (error) {
+        console.error('Supabase error fetching feature flags:', error);
+        return {};
+      }
+
+      return (data || []).reduce((flags, flag) => {
+        flags[flag.name] = flag.enabled;
+        return flags;
+      }, {} as Record<string, boolean>);
+    } catch (error) {
+      console.error('Error fetching feature flags:', error);
+      return {};
+    }
+  }
+
+  async isFeatureEnabled(featureName: string): Promise<boolean> {
+    try {
+      const flags = await this.getFeatureFlags();
+      return flags[featureName] || false;
+    } catch (error) {
+      console.error('Error checking feature flag:', error);
+      return false;
+    }
+  }
+
+  async getMaintenanceMode(): Promise<boolean> {
+    try {
+      const settings = await this.getSiteSettings();
+      return settings.maintenance_mode;
+    } catch (error) {
+      console.error('Error getting maintenance mode:', error);
+      return false;
+    }
+  }
+
+  async getCurrencySettings(): Promise<{ code: string; symbol: string; locale: string }> {
+    try {
+      const settings = await this.getSiteSettings();
+      return {
+        code: settings.currency || 'KES',
+        symbol: settings.currency_symbol || 'KES',
+        locale: 'en-KE',
+      };
+    } catch (error) {
+      console.error('Error getting currency settings:', error);
+      return {
+        code: 'KES',
+        symbol: 'KES',
+        locale: 'en-KE',
+      };
+    }
+  }
+
+  private getFromCache(key: string): any | null {
+    const item = this.cache.get(key);
+    if (!item) return null;
+
+    if (Date.now() - item.timestamp > this.cacheTTL) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return item.data;
+  }
+
+  private setCache(key: string, data: any): void {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+    });
+  }
+
+  private clearCache(key: string): void {
+    this.cache.delete(key);
+  }
+
+  private async getDefaultSiteSettings(): Promise<SiteSettings> {
+    return {
+      id: 'default',
+      site_name: 'Xarastore',
+      site_tagline: "it's a deal",
+      primary_color: '#dc2626',
+      secondary_color: '#fecaca',
+      logo_url: '',
+      favicon_url: '',
+      contact_email: '',
+      support_phone: '',
+      business_address: '',
+      currency: 'KES',
+      currency_symbol: 'KES',
+      tax_rate: 0.16,
+      shipping_free_threshold: 2000,
+      shipping_standard_price: 299,
+      shipping_express_price: 599,
+      return_window_days: 30,
+      seo_title: '',
+      seo_description: '',
+      seo_keywords: '',
+      social_facebook: '',
+      social_twitter: '',
+      social_instagram: '',
+      social_tiktok: '',
+      google_analytics_id: '',
+      facebook_pixel_id: '',
+      maintenance_mode: false,
+      maintenance_message: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  private async getDefaultPaymentSettings(): Promise<PaymentSettings> {
+    return {
+      id: 'default',
+      mpesa_enabled: false,
+      mpesa_consumer_key: '',
+      mpesa_consumer_secret: '',
+      mpesa_shortcode: '',
+      mpesa_passkey: '',
+      mpesa_environment: 'sandbox',
+      stripe_enabled: false,
+      stripe_publishable_key: '',
+      stripe_secret_key: '',
+      stripe_webhook_secret: '',
+      paypal_enabled: false,
+      paypal_client_id: '',
+      paypal_secret_key: '',
+      bank_transfer_enabled: false,
+      bank_name: '',
+      bank_account_name: '',
+      bank_account_number: '',
+      bank_branch: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  private async getDefaultEmailSettings(): Promise<EmailSettings> {
+    return {
+      id: 'default',
+      smtp_host: '',
+      smtp_port: 587,
+      smtp_username: '',
+      smtp_password: '',
+      smtp_encryption: 'tls',
+      from_email: '',
+      from_name: '',
+      order_confirmation_enabled: false,
+      order_shipped_enabled: false,
+      order_delivered_enabled: false,
+      welcome_email_enabled: false,
+      password_reset_enabled: false,
+      newsletter_enabled: false,
+      newsletter_from_name: '',
+      newsletter_from_email: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  private async getDefaultNotificationSettings(): Promise<NotificationSettings> {
+    return {
+      id: 'default',
+      new_order_notification: false,
+      new_order_email: '',
+      low_stock_threshold: 10,
+      low_stock_notification: false,
+      low_stock_email: '',
+      customer_registration_notification: false,
+      customer_registration_email: '',
+      review_submitted_notification: false,
+      review_submitted_email: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  }
+}
+
+export const settingsManager = SettingsManager.getInstance();

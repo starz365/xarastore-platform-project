@@ -1,25 +1,56 @@
 import { supabase } from '../client';
 import { Product, Category, Brand } from '@/types';
 
+// Add timeout to fetch operations
+const FETCH_TIMEOUT = 10000; // 10 seconds
+
+async function fetchWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number = FETCH_TIMEOUT
+): Promise<T> {
+  let timeoutHandle: NodeJS.Timeout;
+  
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(`Fetch timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutHandle!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutHandle!);
+    throw error;
+  }
+}
+
 export async function getFeaturedProducts(limit: number = 8): Promise<Product[]> {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select(`
-        *,
-        brand:brands(*),
-        category:categories(*),
-        variants:product_variants(*)
-      `)
-      .eq('is_featured', true)
-      .gt('stock', 0)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('products')
+        .select(`
+          *,
+          brand:brands(*),
+          category:categories(*),
+          variants:product_variants(*)
+        `)
+        .eq('is_featured', true)
+        .gt('stock', 0)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+    );
 
     if (error) throw error;
 
-    return data.map(transformProduct) || [];
+    return (data || []).map(transformProduct);
   } catch (error) {
+    // Don't log aborted requests
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
     console.error('Error fetching featured products:', error);
     return [];
   }
@@ -27,23 +58,28 @@ export async function getFeaturedProducts(limit: number = 8): Promise<Product[]>
 
 export async function getDeals(limit: number = 20): Promise<Product[]> {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select(`
-        *,
-        brand:brands(*),
-        category:categories(*),
-        variants:product_variants(*)
-      `)
-      .eq('is_deal', true)
-      .gt('stock', 0)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('products')
+        .select(`
+          *,
+          brand:brands(*),
+          category:categories(*),
+          variants:product_variants(*)
+        `)
+        .eq('is_deal', true)
+        .gt('stock', 0)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+    );
 
     if (error) throw error;
 
-    return data.map(transformProduct) || [];
+    return (data || []).map(transformProduct);
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
     console.error('Error fetching deals:', error);
     return [];
   }
@@ -51,24 +87,29 @@ export async function getDeals(limit: number = 20): Promise<Product[]> {
 
 export async function getFlashDeals(): Promise<Product[]> {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select(`
-        *,
-        brand:brands(*),
-        category:categories(*),
-        variants:product_variants(*)
-      `)
-      .eq('is_deal', true)
-      .gt('stock', 0)
-      .lte('deal_ends_at', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString())
-      .order('deal_ends_at', { ascending: true })
-      .limit(8);
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('products')
+        .select(`
+          *,
+          brand:brands(*),
+          category:categories(*),
+          variants:product_variants(*)
+        `)
+        .eq('is_deal', true)
+        .gt('stock', 0)
+        .lte('deal_ends_at', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString())
+        .order('deal_ends_at', { ascending: true })
+        .limit(8)
+    );
 
     if (error) throw error;
 
-    return data.map(transformProduct) || [];
+    return (data || []).map(transformProduct);
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
     console.error('Error fetching flash deals:', error);
     return [];
   }
@@ -76,25 +117,30 @@ export async function getFlashDeals(): Promise<Product[]> {
 
 export async function getEndingSoonDeals(): Promise<Product[]> {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select(`
-        *,
-        brand:brands(*),
-        category:categories(*),
-        variants:product_variants(*)
-      `)
-      .eq('is_deal', true)
-      .gt('stock', 0)
-      .not('deal_ends_at', 'is', null)
-      .lte('deal_ends_at', new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString())
-      .order('deal_ends_at', { ascending: true })
-      .limit(8);
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('products')
+        .select(`
+          *,
+          brand:brands(*),
+          category:categories(*),
+          variants:product_variants(*)
+        `)
+        .eq('is_deal', true)
+        .gt('stock', 0)
+        .not('deal_ends_at', 'is', null)
+        .lte('deal_ends_at', new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString())
+        .order('deal_ends_at', { ascending: true })
+        .limit(8)
+    );
 
     if (error) throw error;
 
-    return data.map(transformProduct) || [];
+    return (data || []).map(transformProduct);
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
     console.error('Error fetching ending soon deals:', error);
     return [];
   }
@@ -102,22 +148,27 @@ export async function getEndingSoonDeals(): Promise<Product[]> {
 
 export async function getProductBySlug(slug: string): Promise<Product | null> {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select(`
-        *,
-        brand:brands(*),
-        category:categories(*),
-        variants:product_variants(*)
-      `)
-      .eq('slug', slug)
-      .single();
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('products')
+        .select(`
+          *,
+          brand:brands(*),
+          category:categories(*),
+          variants:product_variants(*)
+        `)
+        .eq('slug', slug)
+        .single()
+    );
 
     if (error) throw error;
     if (!data) return null;
 
     return transformProduct(data);
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return null;
+    }
     console.error('Error fetching product by slug:', error);
     return null;
   }
@@ -132,28 +183,32 @@ export async function getProductsByCategory(
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    const { data: category, error: categoryError } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('slug', categorySlug)
-      .single();
+    const { data: category, error: categoryError } = await fetchWithTimeout(
+      supabase
+        .from('categories')
+        .select('id')
+        .eq('slug', categorySlug)
+        .single()
+    );
 
     if (categoryError || !category) {
       return { products: [], total: 0 };
     }
 
-    const { data: products, count, error } = await supabase
-      .from('products')
-      .select(`
-        *,
-        brand:brands(*),
-        category:categories(*),
-        variants:product_variants(*)
-      `, { count: 'exact' })
-      .eq('category_id', category.id)
-      .gt('stock', 0)
-      .order('created_at', { ascending: false })
-      .range(from, to);
+    const { data: products, count, error } = await fetchWithTimeout(
+      supabase
+        .from('products')
+        .select(`
+          *,
+          brand:brands(*),
+          category:categories(*),
+          variants:product_variants(*)
+        `, { count: 'exact' })
+        .eq('category_id', category.id)
+        .gt('stock', 0)
+        .order('created_at', { ascending: false })
+        .range(from, to)
+    );
 
     if (error) throw error;
 
@@ -162,6 +217,9 @@ export async function getProductsByCategory(
       total: count || 0,
     };
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { products: [], total: 0 };
+    }
     console.error('Error fetching products by category:', error);
     return { products: [], total: 0 };
   }
@@ -240,7 +298,9 @@ export async function searchProducts(
       supabaseQuery = supabaseQuery.order('created_at', { ascending: false });
     }
 
-    const { data, count, error } = await supabaseQuery.range(from, to);
+    const { data, count, error } = await fetchWithTimeout(
+      supabaseQuery.range(from, to)
+    );
 
     if (error) throw error;
 
@@ -249,6 +309,9 @@ export async function searchProducts(
       total: count || 0,
     };
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { products: [], total: 0 };
+    }
     console.error('Error searching products:', error);
     return { products: [], total: 0 };
   }
@@ -260,24 +323,29 @@ export async function getRelatedProducts(
   limit: number = 4
 ): Promise<Product[]> {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select(`
-        *,
-        brand:brands(*),
-        category:categories(*),
-        variants:product_variants(*)
-      `)
-      .eq('category_id', categoryId)
-      .neq('id', productId)
-      .gt('stock', 0)
-      .order('rating', { ascending: false })
-      .limit(limit);
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('products')
+        .select(`
+          *,
+          brand:brands(*),
+          category:categories(*),
+          variants:product_variants(*)
+        `)
+        .eq('category_id', categoryId)
+        .neq('id', productId)
+        .gt('stock', 0)
+        .order('rating', { ascending: false })
+        .limit(limit)
+    );
 
     if (error) throw error;
 
-    return data.map(transformProduct) || [];
+    return (data || []).map(transformProduct);
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
     console.error('Error fetching related products:', error);
     return [];
   }
@@ -285,32 +353,47 @@ export async function getRelatedProducts(
 
 export async function getCategories(): Promise<Category[]> {
   try {
-    const { data, error } = await supabase
-      .from('categories')
-      .select('*')
-      .order('name')
-      .gt('product_count', 0);
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('categories')
+        .select('*')
+        .order('name')
+    );
 
-    if (error) throw error;
+    if (error) {
+      // Don't log the full error object
+      return [];
+    }
 
-    return data || [];
+    // Filter categories with product count > 0 if the column exists
+    const categoriesWithProducts = (data || []).filter(cat => {
+      // Check if product_count exists and is > 0, otherwise include all
+      return cat.product_count === undefined || cat.product_count > 0;
+    });
+
+    return categoriesWithProducts;
   } catch (error) {
-    console.error('Error fetching categories:', error);
+    // Silently fail and return empty array
     return [];
   }
 }
 
 export async function getBrands(): Promise<Brand[]> {
   try {
-    const { data, error } = await supabase
-      .from('brands')
-      .select('*')
-      .order('name');
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('brands')
+        .select('*')
+        .order('name')
+    );
 
     if (error) throw error;
 
     return data || [];
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
     console.error('Error fetching brands:', error);
     return [];
   }
@@ -326,17 +409,17 @@ export async function transformProduct(data: any): Product {
     originalPrice: data.original_price ? parseFloat(data.original_price) : undefined,
     sku: data.sku,
     brand: {
-      id: data.brand.id,
-      slug: data.brand.slug,
-      name: data.brand.name,
-      logo: data.brand.logo,
-      productCount: data.brand.product_count,
+      id: data.brand?.id || '',
+      slug: data.brand?.slug || '',
+      name: data.brand?.name || '',
+      logo: data.brand?.logo || '',
+      productCount: data.brand?.product_count || 0,
     },
     category: {
-      id: data.category.id,
-      slug: data.category.slug,
-      name: data.category.name,
-      productCount: data.category.product_count,
+      id: data.category?.id || '',
+      slug: data.category?.slug || '',
+      name: data.category?.name || '',
+      productCount: data.category?.product_count || 0,
     },
     images: data.images || [],
     variants: data.variants?.map((v: any) => ({
@@ -352,8 +435,8 @@ export async function transformProduct(data: any): Product {
     rating: parseFloat(data.rating) || 0,
     reviewCount: data.review_count || 0,
     stock: data.stock,
-    isFeatured: data.is_featured,
-    isDeal: data.is_deal,
+    isFeatured: data.is_featured || false,
+    isDeal: data.is_deal || false,
     dealEndsAt: data.deal_ends_at,
     createdAt: data.created_at,
     updatedAt: data.updated_at,

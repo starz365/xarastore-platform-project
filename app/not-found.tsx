@@ -56,10 +56,7 @@ export default function NotFoundPage() {
                       placeholder="Search for products, brands, or categories..."
                       className="w-full px-6 py-4 border border-gray-300 rounded-xl text-lg focus:border-red-600 focus:ring-4 focus:ring-red-600/20 outline-none"
                     />
-                    <Button
-                      variant="primary"
-                      className="absolute right-2 top-2"
-                    >
+                    <Button variant="primary" className="absolute right-2 top-2">
                       Search
                     </Button>
                   </div>
@@ -90,24 +87,24 @@ export default function NotFoundPage() {
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h3>
                   <div className="space-y-4">
-                    <Button variant="primary" className="w-full" asChild>
-                      <Link href="/">
+                    <Link href="/" className="block w-full">
+                      <Button variant="primary" className="w-full">
                         <Home className="w-5 h-5 mr-2" />
                         Go to Homepage
-                      </Link>
-                    </Button>
-                    <Button variant="secondary" className="w-full" asChild>
-                      <Link href="/shop">
+                      </Button>
+                    </Link>
+                    <Link href="/shop" className="block w-full">
+                      <Button variant="secondary" className="w-full">
                         <Grid className="w-5 h-5 mr-2" />
                         Browse All Products
-                      </Link>
-                    </Button>
-                    <Button variant="outline" className="w-full" asChild>
-                      <Link href="/deals">
+                      </Button>
+                    </Link>
+                    <Link href="/deals" className="block w-full">
+                      <Button variant="outline" className="w-full">
                         <ArrowRight className="w-5 h-5 mr-2" />
                         View Today's Deals
-                      </Link>
-                    </Button>
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -163,16 +160,16 @@ export default function NotFoundPage() {
                     Our customer support team is available 24/7 to assist you.
                   </p>
                   <div className="space-y-3">
-                    <Button variant="secondary" className="w-full" asChild>
-                      <Link href="/help/contact">
+                    <Link href="/help/contact" className="block w-full">
+                      <Button variant="secondary" className="w-full text-black">
                         Contact Support
-                      </Link>
-                    </Button>
-                    <Button variant="outline" className="w-full text-white border-white" asChild>
-                      <Link href="/help">
+                      </Button>
+                    </Link>
+                    <Link href="/help" className="block w-full">
+                      <Button variant="outline" className="w-full text-blue border-white">
                         Visit Help Center
-                      </Link>
-                    </Button>
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -184,11 +181,11 @@ export default function NotFoundPage() {
                 <div>
                   <h4 className="font-semibold text-gray-900 mb-2">Technical Information</h4>
                   <p className="text-sm text-gray-600">
-                    Requested URL: <code className="bg-gray-100 px-2 py-1 rounded">{typeof window !== 'undefined' ? window.location.pathname : ''}</code>
+                    Error Code: <code className="bg-gray-100 px-2 py-1 rounded">404_NOT_FOUND</code>
                   </p>
                 </div>
                 <div className="text-sm text-gray-500">
-                  Error Code: <span className="font-mono">404_NOT_FOUND</span>
+                  Status: <span className="font-mono">Page Not Found</span>
                 </div>
               </div>
             </div>
@@ -199,7 +196,7 @@ export default function NotFoundPage() {
         <div className="mt-8 flex flex-wrap justify-center gap-6">
           {[
             { label: 'Shop All', href: '/shop' },
-            { label: 'Today\'s Deals', href: '/deals' },
+            { label: "Today's Deals", href: '/deals' },
             { label: 'Gift Cards', href: '/gift-cards' },
             { label: 'Brands', href: '/brands' },
             { label: 'Sell on Xarastore', href: '/sell' },

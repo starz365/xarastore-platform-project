@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+// Schema definitions
 export const emailSchema = z
   .string()
   .min(1, 'Email is required')
@@ -54,6 +55,7 @@ export const mpesaSchema = z.object({
   amount: z.number().min(1, 'Amount must be at least KES 1').max(150000, 'Maximum amount is KES 150,000'),
 });
 
+// Validation functions with Zod
 export function validateEmail(email: string): { isValid: boolean; error?: string } {
   const result = emailSchema.safeParse(email);
   return {
@@ -142,4 +144,171 @@ export function validatePostalCode(postalCode: string, country: string): boolean
     return /^\d{5}$/.test(postalCode);
   }
   return postalCode.length > 0;
+}
+
+// Additional utility validation functions
+
+/**
+ * Validates that a value is not empty (null, undefined, empty string, empty array, empty object)
+ */
+export function isEmpty(value: any): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return value.trim().length === 0;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value).length === 0;
+  return false;
+}
+
+/**
+ * Validates a product ID format (UUID)
+ */
+export function validateProductId(id: any): boolean {
+  if (!id || typeof id !== 'string') return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+}
+
+/**
+ * Validates a URL slug
+ */
+export function validateSlug(slug: any): boolean {
+  if (!slug || typeof slug !== 'string') return false;
+  const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  return slugRegex.test(slug);
+}
+
+/**
+ * Validates and sanitizes a string (removes HTML tags)
+ */
+export function sanitizeString(input: any, maxLength: number = 1000): string {
+  if (typeof input !== 'string') return '';
+  const sanitized = input.replace(/<[^>]*>/g, '');
+  return sanitized.trim().slice(0, maxLength);
+}
+
+/**
+ * Validates a numeric ID
+ */
+export function validateNumericId(id: any): boolean {
+  if (typeof id === 'number') return Number.isInteger(id) && id > 0;
+  if (typeof id === 'string') return /^\d+$/.test(id) && parseInt(id, 10) > 0;
+  return false;
+}
+
+/**
+ * Validates an ISO date string
+ */
+export function validateISODate(dateString: string): boolean {
+  try {
+    const date = new Date(dateString);
+    return date instanceof Date && !isNaN(date.getTime());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validates a future date
+ */
+export function validateFutureDate(dateString: string): boolean {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    return date instanceof Date && !isNaN(date.getTime()) && date > now;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Safely parses JSON with fallback
+ */
+export function safeJSONParse<T>(json: string, fallback: T): T {
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Validates a Kenyan ID number
+ */
+export function validateKenyanID(id: string): boolean {
+  return /^\d{7,8}$/.test(id);
+}
+
+/**
+ * Validates a Kenyan KRA PIN
+ */
+export function validateKraPin(pin: string): boolean {
+  return /^[A-Z]\d{9}[A-Z]$/.test(pin);
+}
+
+/**
+ * Validates M-Pesa transaction ID
+ */
+export function validateMpesaTransactionId(transactionId: string): boolean {
+  return /^[A-Z0-9]{10,20}$/.test(transactionId);
+}
+
+/**
+ * Validates credit card number using Luhn algorithm
+ */
+export function validateCreditCardNumber(cardNumber: string): boolean {
+  const cleaned = cardNumber.replace(/\D/g, '');
+  if (!/^\d{16}$/.test(cleaned)) return false;
+  
+  let sum = 0;
+  let isEven = false;
+  
+  for (let i = cleaned.length - 1; i >= 0; i--) {
+    let digit = parseInt(cleaned.charAt(i), 10);
+    
+    if (isEven) {
+      digit *= 2;
+      if (digit > 9) {
+        digit -= 9;
+      }
+    }
+    
+    sum += digit;
+    isEven = !isEven;
+  }
+  
+  return sum % 10 === 0;
+}
+
+/**
+ * Validates that a value is within range
+ */
+export function isInRange(value: number, min: number, max: number): boolean {
+  return value >= min && value <= max;
+}
+
+/**
+ * Validates file size
+ */
+export function validateFileSize(file: File, maxSizeMB: number): { isValid: boolean; error?: string } {
+  const maxSizeBytes = maxSizeMB * 1024 * 1024;
+  if (file.size > maxSizeBytes) {
+    return {
+      isValid: false,
+      error: `File size must be less than ${maxSizeMB}MB`,
+    };
+  }
+  return { isValid: true };
+}
+
+/**
+ * Validates file type
+ */
+export function validateFileType(file: File, allowedTypes: string[]): { isValid: boolean; error?: string } {
+  if (!allowedTypes.includes(file.type)) {
+    return {
+      isValid: false,
+      error: `File type must be: ${allowedTypes.join(', ')}`,
+    };
+  }
+  return { isValid: true };
 }

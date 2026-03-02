@@ -1,336 +1,341 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, memo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Heart, ShoppingCart, Eye, Star, Check } from 'lucide-react';
-import { Product } from '@/types';
+import { Heart, Eye, Clock, AlertTriangle } from 'lucide-react';
+import { Product } from '@/types/product';
 import { PriceDisplay } from '@/components/ui/PriceDisplay';
 import { Rating } from '@/components/ui/Rating';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { useCart } from '@/lib/hooks/useCart';
+import { AddToCartButton } from './AddToCartButton';
+import { useWishlist } from '@/lib/hooks/useWishlist';
+import { useAnalytics } from '@/lib/hooks/useAnalytics';
 import { toast } from '@/components/shared/Toast';
-import { analytics } from '@/services/analytics/tracker';
+import { cn } from '@/lib/utils/cn';
 
 interface ProductCardProps {
   product: Product;
-  layout?: 'vertical' | 'horizontal';
   showTimer?: boolean;
+  priority?: boolean;
+  className?: string;
+  onQuickView?: () => void;
 }
 
-export function ProductCard({ 
+export const ProductCard = memo(function ProductCard({ 
   product, 
-  layout = 'vertical',
-  showTimer = false 
+  showTimer = false, 
+  priority = false,
+  className = '',
+  onQuickView
 }: ProductCardProps) {
-  const [isWishlisted, setIsWishlisted] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
-  const [isAdded, setIsAdded] = useState(false);
-  const { addItem, items } = useCart();
+  const [isImageLoaded, setIsImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+  const { trackEvent } = useAnalytics();
 
-  const isInCart = items.some(
-    (item) => item.productId === product.id
-  );
+  // Defensive checks for required data
+  const safeProduct = {
+    id: product?.id || '',
+    slug: product?.slug || '',
+    name: product?.name || 'Product Name Unavailable',
+    description: product?.description || '',
+    price: typeof product?.price === 'number' && !isNaN(product.price) ? product.price : 0,
+    originalPrice: typeof product?.originalPrice === 'number' && !isNaN(product.originalPrice) ? product.originalPrice : null,
+    sku: product?.sku || '',
+    brand: product?.brand || { id: '', slug: '', name: 'Unknown Brand', logo: '', productCount: 0 },
+    category: product?.category || { id: '', slug: '', name: 'Uncategorized', productCount: 0 },
+    images: Array.isArray(product?.images) ? product.images : [],
+    variants: Array.isArray(product?.variants) ? product.variants : [],
+    specifications: product?.specifications || {},
+    rating: typeof product?.rating === 'number' && !isNaN(product.rating) ? product.rating : 0,
+    reviewCount: typeof product?.reviewCount === 'number' && !isNaN(product.reviewCount) ? product.reviewCount : 0,
+    stock: typeof product?.stock === 'number' && !isNaN(product.stock) ? product.stock : 0,
+    isFeatured: !!product?.isFeatured,
+    isDeal: !!product?.isDeal,
+    dealEndsAt: product?.dealEndsAt || null,
+    allowPreorder: !!product?.allowPreorder,
+    estimatedRestockDate: product?.estimatedRestockDate || null,
+    createdAt: product?.createdAt || new Date().toISOString(),
+    updatedAt: product?.updatedAt || new Date().toISOString(),
+  };
 
-  const discountPercentage = product.originalPrice
-    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+  const isOutOfStock = safeProduct.stock === 0;
+  const isLowStock = safeProduct.stock > 0 && safeProduct.stock <= 5;
+  const discountPercentage = safeProduct.originalPrice && safeProduct.price
+    ? Math.round(((safeProduct.originalPrice - safeProduct.price) / safeProduct.originalPrice) * 100)
     : 0;
 
-  const handleAddToCart = async () => {
-    if (isAdding || product.stock === 0) return;
+  const isWishlisted = isInWishlist(safeProduct.id);
 
-    setIsAdding(true);
+  const handleWishlistToggle = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     try {
-      const defaultVariant = product.variants?.[0] || {
+      if (isWishlisted) {
+        await removeFromWishlist(safeProduct.id);
+        toast.success('Removed from wishlist');
+        trackEvent({
+          category: 'wishlist',
+          action: 'remove',
+          label: safeProduct.id,
+        });
+      } else {
+        await addToWishlist(safeProduct.id);
+        toast.success('Added to wishlist');
+        trackEvent({
+          category: 'wishlist',
+          action: 'add',
+          label: safeProduct.id,
+          value: safeProduct.price,
+        });
+      }
+    } catch (error) {
+      toast.error('Failed to update wishlist', {
+        description: error instanceof Error ? error.message : 'Please try again',
+      });
+    }
+  }, [isWishlisted, safeProduct.id, safeProduct.price, addToWishlist, removeFromWishlist, trackEvent]);
+
+  const handleQuickView = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (onQuickView) {
+      onQuickView();
+    } else {
+      window.location.href = `/product/${safeProduct.slug}`;
+    }
+    
+    trackEvent({
+      category: 'product',
+      action: 'quick_view',
+      label: safeProduct.id,
+    });
+  }, [safeProduct.slug, safeProduct.id, onQuickView, trackEvent]);
+
+  const handleViewSimilar = useCallback(() => {
+    if (safeProduct.category?.slug) {
+      window.location.href = `/category/${safeProduct.category.slug}?exclude=${safeProduct.id}`;
+    } else {
+      window.location.href = '/shop';
+    }
+  }, [safeProduct.category?.slug, safeProduct.id]);
+
+  const getStockStatusText = () => {
+    if (isOutOfStock) return 'Out of Stock';
+    if (isLowStock) return `Only ${safeProduct.stock} left`;
+    return 'In Stock';
+  };
+
+  const getStockStatusColor = () => {
+    if (isOutOfStock) return 'text-red-600';
+    if (isLowStock) return 'text-orange-600';
+    return 'text-green-600';
+  };
+
+  const defaultVariant = safeProduct.variants && safeProduct.variants.length > 0 
+    ? safeProduct.variants[0] 
+    : {
         id: 'default',
-        price: product.price,
-        originalPrice: product.originalPrice,
-        sku: product.sku,
-        stock: product.stock,
         name: 'Default',
+        price: safeProduct.price,
+        originalPrice: safeProduct.originalPrice,
+        sku: safeProduct.sku,
+        stock: safeProduct.stock,
         attributes: {},
       };
 
-      await addItem(product.id, defaultVariant, 1);
-      
-      setIsAdded(true);
-      analytics.trackAddToCart(product.id, product.name, product.price, 1);
-      
-      toast.success('Added to cart!', {
-        description: `${product.name} added to your cart.`,
-      });
-
-      setTimeout(() => {
-        setIsAdded(false);
-      }, 2000);
-    } catch (error) {
-      console.error('Failed to add to cart:', error);
-      toast.error('Failed to add to cart', {
-        description: 'Please try again or contact support.',
-      });
-    } finally {
-      setIsAdding(false);
-    }
-  };
-
-  const handleWishlistToggle = () => {
-    const newWishlisted = !isWishlisted;
-    setIsWishlisted(newWishlisted);
-    
-    if (newWishlisted) {
-      toast.success('Added to wishlist', {
-        description: `${product.name} saved to your wishlist.`,
-      });
-    } else {
-      toast.info('Removed from wishlist', {
-        description: `${product.name} removed from wishlist.`,
-      });
-    }
-  };
-
-  const handleQuickView = () => {
-    analytics.trackProductView(product.id, product.name);
-    // In a real implementation, this would open a modal
-    console.log('Quick view:', product.id);
-  };
-
-  if (layout === 'horizontal') {
-    return (
-      <div className="group flex bg-white rounded-lg border border-gray-200 hover:border-red-300 hover:shadow-md transition-all duration-200 overflow-hidden">
-        {/* Product Image */}
-        <Link href={`/product/${product.slug}`} className="flex-shrink-0">
-          <div className="relative w-32 h-32 md:w-40 md:h-40 bg-gray-100">
-            <Image
-              src={product.images?.[0] || '/placeholder.jpg'}
-              alt={product.name}
-              fill
-              className="object-cover"
-              sizes="160px"
-            />
-            {discountPercentage > 0 && (
-              <Badge className="absolute top-2 left-2 bg-red-600 text-white">
-                -{discountPercentage}%
-              </Badge>
-            )}
-          </div>
-        </Link>
-
-        {/* Product Info */}
-        <div className="flex-1 p-4 md:p-6">
-          <div className="flex flex-col h-full">
-            <div className="flex-1">
-              {/* Brand */}
-              <Link
-                href={`/brands/${product.brand.slug}`}
-                className="text-sm text-gray-500 hover:text-red-600 transition-colors"
-              >
-                {product.brand.name}
-              </Link>
-
-              {/* Name */}
-              <Link href={`/product/${product.slug}`}>
-                <h3 className="font-semibold text-gray-900 mt-1 line-clamp-2 hover:text-red-600 transition-colors">
-                  {product.name}
-                </h3>
-              </Link>
-
-              {/* Rating */}
-              <div className="flex items-center space-x-2 mt-2">
-                <Rating value={product.rating} size="sm" />
-                <span className="text-sm text-gray-500">
-                  ({product.reviewCount})
-                </span>
-              </div>
-
-              {/* Description */}
-              <p className="text-sm text-gray-600 mt-2 line-clamp-2">
-                {product.description}
-              </p>
-
-              {/* Specifications */}
-              {product.specifications && Object.keys(product.specifications).length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs text-gray-500">
-                    {Object.entries(product.specifications)
-                      .slice(0, 2)
-                      .map(([key]) => key)
-                      .join(', ')}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between mt-4">
-              {/* Price */}
-              <div>
-                <PriceDisplay
-                  price={product.price}
-                  originalPrice={product.originalPrice}
-                  currency="KES"
-                />
-                <div className="text-xs text-gray-500 mt-1">
-                  {product.stock > 0 
-                    ? `${product.stock} in stock` 
-                    : 'Out of stock'}
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={handleWishlistToggle}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                  aria-label={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
-                >
-                  <Heart
-                    className={`w-5 h-5 ${
-                      isWishlisted ? 'fill-red-600 text-red-600' : 'text-gray-400'
-                    }`}
-                  />
-                </button>
-                
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleAddToCart}
-                  disabled={product.stock === 0 || isAdding || isAdded || isInCart}
-                >
-                  {isAdding ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      Adding...
-                    </>
-                  ) : isAdded || isInCart ? (
-                    <>
-                      <Check className="w-4 h-4 mr-2" />
-                      Added
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="w-4 h-4 mr-2" />
-                      Add to Cart
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Vertical layout (default)
   return (
-    <div className="group relative bg-white rounded-xl border border-gray-200 hover:border-red-300 hover:shadow-card-hover transition-all duration-200 overflow-hidden">
+    <article 
+      className={cn(
+        'group relative bg-white rounded-xl border border-gray-200 hover:border-brand-red hover:shadow-card-hover transition-all duration-200 overflow-hidden',
+        className
+      )}
+      aria-label={`Product: ${safeProduct.name}`}
+    >
       {/* Wishlist button */}
       <button
         onClick={handleWishlistToggle}
-        className="absolute top-3 right-3 z-10 p-2 bg-white/90 backdrop-blur-sm rounded-full hover:bg-white transition-colors shadow-sm"
+        className="absolute top-3 right-3 z-10 p-2 bg-white/90 backdrop-blur-sm rounded-full hover:bg-white transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-red focus:ring-offset-2"
         aria-label={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
       >
         <Heart
-          className={`w-5 h-5 ${
-            isWishlisted ? 'fill-red-600 text-red-600' : 'text-gray-400'
-          }`}
+          className={cn(
+            'w-5 h-5 transition-colors',
+            isWishlisted ? 'fill-brand-red text-brand-red' : 'text-gray-400'
+          )}
+          aria-hidden="true"
         />
       </button>
 
       {/* Discount badge */}
-      {discountPercentage > 0 && (
-        <Badge className="absolute top-3 left-3 z-10 bg-red-600 text-white">
+      {!isOutOfStock && discountPercentage > 0 && (
+        <Badge 
+          className="absolute top-3 left-3 z-10 bg-brand-red text-white"
+          aria-label={`${discountPercentage}% discount`}
+        >
           -{discountPercentage}%
         </Badge>
       )}
 
+      {/* Out of Stock badge */}
+      {isOutOfStock && (
+        <Badge 
+          className="absolute top-3 left-3 z-10 bg-gray-800 text-white"
+          aria-label="Out of stock"
+        >
+          Out of Stock
+        </Badge>
+      )}
+
       {/* Product image */}
-      <Link href={`/product/${product.slug}`} className="block">
+      <Link 
+        href={`/product/${safeProduct.slug}`} 
+        className="block relative"
+        aria-label={`View ${safeProduct.name} details`}
+      >
         <div className="relative aspect-square bg-gray-100">
-          <Image
-            src={product.images?.[0] || '/placeholder.jpg'}
-            alt={product.name}
-            fill
-            className="object-cover group-hover:scale-105 transition-transform duration-300"
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-200" />
+          {!isImageLoaded && !imageError && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-8 h-8 border-2 border-gray-300 border-t-brand-red rounded-full animate-spin" />
+            </div>
+          )}
+          
+          {safeProduct.images && safeProduct.images.length > 0 && !imageError ? (
+            <Image
+              src={safeProduct.images[0]}
+              alt={safeProduct.name}
+              fill
+              className={cn(
+                'object-cover transition-all duration-300',
+                isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105',
+                isImageLoaded ? 'opacity-100' : 'opacity-0'
+              )}
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              priority={priority}
+              onLoad={() => setIsImageLoaded(true)}
+              onError={() => {
+                setImageError(true);
+                setIsImageLoaded(true);
+              }}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
+              <span className="text-gray-400 text-sm">No image</span>
+            </div>
+          )}
+
+          {isOutOfStock && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/5">
+              <span className="px-3 py-1 bg-gray-900/75 text-white text-sm font-medium rounded-full backdrop-blur-sm">
+                Out of Stock
+              </span>
+            </div>
+          )}
         </div>
       </Link>
 
       {/* Product info */}
       <div className="p-4">
         {/* Brand */}
-        <Link
-          href={`/brands/${product.brand.slug}`}
-          className="text-sm text-gray-500 hover:text-red-600 transition-colors block mb-1"
-        >
-          {product.brand.name}
-        </Link>
+        {safeProduct.brand?.slug ? (
+          <Link
+            href={`/brands/${safeProduct.brand.slug}`}
+            className="text-sm text-gray-500 hover:text-brand-red transition-colors focus:outline-none focus:underline"
+            aria-label={`View all products from ${safeProduct.brand.name}`}
+          >
+            {safeProduct.brand.name}
+          </Link>
+        ) : (
+          <span className="text-sm text-gray-500">{safeProduct.brand.name}</span>
+        )}
 
         {/* Name */}
-        <Link href={`/product/${product.slug}`}>
-          <h3 className="font-medium text-gray-900 line-clamp-2 hover:text-red-600 transition-colors min-h-[3rem]">
-            {product.name}
+        <Link 
+          href={`/product/${safeProduct.slug}`}
+          className="block focus:outline-none focus:underline"
+          aria-label={safeProduct.name}
+        >
+          <h3 className="font-medium text-gray-900 mt-1 line-clamp-2 hover:text-brand-red transition-colors">
+            {safeProduct.name}
           </h3>
         </Link>
 
         {/* Rating */}
         <div className="flex items-center space-x-2 mt-2">
-          <Rating value={product.rating} />
+          <Rating value={safeProduct.rating} size="sm" />
           <span className="text-sm text-gray-500">
-            ({product.reviewCount})
+            ({safeProduct.reviewCount.toLocaleString()})
           </span>
         </div>
 
         {/* Price */}
         <div className="mt-3">
           <PriceDisplay
-            price={product.price}
-            originalPrice={product.originalPrice}
+            price={safeProduct.price}
+            originalPrice={safeProduct.originalPrice}
             currency="KES"
-            size="lg"
+            size={isOutOfStock ? 'md' : 'lg'}
+            className={isOutOfStock ? 'opacity-60' : ''}
           />
         </div>
 
-        {/* Stock status */}
-        <div className="mt-2">
-          {product.stock > 10 ? (
-            <span className="text-sm text-green-600 flex items-center">
-              <Check className="w-4 h-4 mr-1" />
-              In stock
-            </span>
-          ) : product.stock > 0 ? (
-            <span className="text-sm text-orange-600">
-              Only {product.stock} left
-            </span>
-          ) : (
-            <span className="text-sm text-red-600">Out of stock</span>
+        {/* Stock status with warning for low stock */}
+        <div className="mt-2 flex items-center space-x-2">
+          {isLowStock && !isOutOfStock && (
+            <AlertTriangle className="w-4 h-4 text-orange-600" aria-hidden="true" />
           )}
+          <span className={cn('text-sm', getStockStatusColor())}>
+            {getStockStatusText()}
+          </span>
         </div>
 
+        {/* Timer for deals */}
+        {showTimer && !isOutOfStock && discountPercentage > 0 && safeProduct.dealEndsAt && (
+          <div className="mt-3 flex items-center space-x-2 text-sm text-gray-600">
+            <Clock className="w-4 h-4" aria-hidden="true" />
+            <time dateTime={safeProduct.dealEndsAt}>
+              Ends {new Date(safeProduct.dealEndsAt).toLocaleDateString('en-KE', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+              })}
+            </time>
+          </div>
+        )}
+
         {/* Action buttons */}
-        <div className="mt-4 flex items-center space-x-2">
-          <Button
-            variant="primary"
-            size="sm"
-            className="flex-1"
-            onClick={handleAddToCart}
-            disabled={product.stock === 0 || isAdding || isAdded || isInCart}
-          >
-            <ShoppingCart className="w-4 h-4 mr-2" />
-            {isAdding ? 'Adding...' : isAdded || isInCart ? 'Added' : 'Add to Cart'}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="flex-shrink-0"
-            onClick={handleQuickView}
-          >
-            <Eye className="w-4 h-4" />
-          </Button>
+        <div className="mt-4">
+          <AddToCartButton
+            product={safeProduct}
+            variant={defaultVariant}
+            stock={safeProduct.stock}
+            onViewSimilar={handleViewSimilar}
+            onAddToCartSuccess={() => {
+              trackEvent({
+                category: 'ecommerce',
+                action: 'add_to_cart',
+                label: safeProduct.id,
+                value: safeProduct.price,
+              });
+            }}
+          />
         </div>
+
+        {/* Quick view button */}
+        <button
+          onClick={handleQuickView}
+          className="absolute inset-x-0 bottom-0 translate-y-full group-hover:translate-y-0 transition-transform duration-200 bg-brand-red text-white text-center py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-brand-red"
+          aria-label={`Quick view ${safeProduct.name}`}
+        >
+          <Eye className="w-4 h-4 inline-block mr-2" aria-hidden="true" />
+          Quick View
+        </button>
       </div>
-    </div>
+    </article>
   );
-}
+});
+
+ProductCard.displayName = 'ProductCard';

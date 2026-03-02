@@ -1,0 +1,213 @@
+'use client';
+
+import * as React from 'react';
+import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
+import { Button } from './Button';
+
+interface PaginationProps {
+  currentPage: number;
+  totalPages: number;
+  baseUrl: string;
+  queryParams?: Record<string, string>;
+  siblingCount?: number;
+  className?: string;
+  showNumbers?: boolean;
+  onPageChange?: (page: number) => void;
+}
+
+export function Pagination({
+  currentPage,
+  totalPages,
+  baseUrl,
+  queryParams = {},
+  siblingCount = 1,
+  className,
+  showNumbers = true,
+  onPageChange,
+}: PaginationProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Generate page numbers to display
+  const getPageNumbers = () => {
+    const totalNumbers = siblingCount * 2 + 3; // siblings + first + last + current
+    const totalBlocks = totalNumbers + 2; // +2 for ellipsis blocks
+
+    if (totalPages <= totalBlocks) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    const leftSiblingIndex = Math.max(currentPage - siblingCount, 1);
+    const rightSiblingIndex = Math.min(currentPage + siblingCount, totalPages);
+
+    const shouldShowLeftDots = leftSiblingIndex > 2;
+    const shouldShowRightDots = rightSiblingIndex < totalPages - 2;
+
+    const firstPageIndex = 1;
+    const lastPageIndex = totalPages;
+
+    if (!shouldShowLeftDots && shouldShowRightDots) {
+      const leftItemCount = 3 + 2 * siblingCount;
+      const leftRange = Array.from({ length: leftItemCount }, (_, i) => i + 1);
+      return [...leftRange, '...', totalPages];
+    }
+
+    if (shouldShowLeftDots && !shouldShowRightDots) {
+      const rightItemCount = 3 + 2 * siblingCount;
+      const rightRange = Array.from(
+        { length: rightItemCount },
+        (_, i) => totalPages - rightItemCount + i + 1
+      );
+      return [firstPageIndex, '...', ...rightRange];
+    }
+
+    if (shouldShowLeftDots && shouldShowRightDots) {
+      const middleRange = Array.from(
+        { length: rightSiblingIndex - leftSiblingIndex + 1 },
+        (_, i) => leftSiblingIndex + i
+      );
+      return [firstPageIndex, '...', ...middleRange, '...', lastPageIndex];
+    }
+
+    return [];
+  };
+
+  const buildUrl = (page: number) => {
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    
+    // Update page parameter
+    if (page === 1) {
+      params.delete('page');
+    } else {
+      params.set('page', page.toString());
+    }
+
+    // Add additional query params
+    Object.entries(queryParams).forEach(([key, value]) => {
+      if (value) {
+        params.set(key, value);
+      }
+    });
+
+    const queryString = params.toString();
+    return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+  };
+
+  const handlePageChange = (page: number) => {
+    if (onPageChange) {
+      onPageChange(page);
+    }
+  };
+
+  if (totalPages <= 1) return null;
+
+  return (
+    <nav
+      role="navigation"
+      aria-label="Pagination"
+      className={cn('flex items-center justify-center space-x-2', className)}
+    >
+      {/* Previous button */}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={currentPage === 1}
+        asChild={currentPage > 1}
+        className={cn(
+          'min-w-[40px]',
+          currentPage === 1 && 'cursor-not-allowed opacity-50'
+        )}
+      >
+        {currentPage > 1 ? (
+          <Link
+            href={buildUrl(currentPage - 1)}
+            aria-label="Go to previous page"
+            onClick={() => handlePageChange(currentPage - 1)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Link>
+        ) : (
+          <span>
+            <ChevronLeft className="h-4 w-4" />
+          </span>
+        )}
+      </Button>
+
+      {/* Page numbers */}
+      {showNumbers &&
+        getPageNumbers().map((page, index) => {
+          if (page === '...') {
+            return (
+              <Button
+                key={`ellipsis-${index}`}
+                variant="outline"
+                size="sm"
+                disabled
+                className="min-w-[40px] cursor-default"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            );
+          }
+
+          const pageNumber = page as number;
+          const isActive = pageNumber === currentPage;
+
+          return (
+            <Button
+              key={pageNumber}
+              variant={isActive ? 'primary' : 'outline'}
+              size="sm"
+              asChild={!isActive}
+              className={cn(
+                'min-w-[40px]',
+                isActive && 'bg-red-600 text-white hover:bg-red-700'
+              )}
+            >
+              {!isActive ? (
+                <Link
+                  href={buildUrl(pageNumber)}
+                  aria-label={`Go to page ${pageNumber}`}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => handlePageChange(pageNumber)}
+                >
+                  {pageNumber}
+                </Link>
+              ) : (
+                <span aria-current="page">{pageNumber}</span>
+              )}
+            </Button>
+          );
+        })}
+
+      {/* Next button */}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={currentPage === totalPages}
+        asChild={currentPage < totalPages}
+        className={cn(
+          'min-w-[40px]',
+          currentPage === totalPages && 'cursor-not-allowed opacity-50'
+        )}
+      >
+        {currentPage < totalPages ? (
+          <Link
+            href={buildUrl(currentPage + 1)}
+            aria-label="Go to next page"
+            onClick={() => handlePageChange(currentPage + 1)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        ) : (
+          <span>
+            <ChevronRight className="h-4 w-4" />
+          </span>
+        )}
+      </Button>
+    </nav>
+  );
+}

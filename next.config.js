@@ -90,13 +90,12 @@ const withPWA = require('next-pwa')({
 
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   compress: true,
   poweredByHeader: false,
-  output: 'standalone',
+  output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
 
   // ==========================
-  // Images (FIXED - removed deprecated 'domains')
+  // Images
   // ==========================
   images: {
     remotePatterns: [
@@ -133,25 +132,31 @@ const nextConfig = {
     },
   ],
 
-  experimental: {
-    // Streaming support for Server Components
-    serverComponentsExternalPackages: ['@supabase/supabase-js'],
-    //optimizeCss: true,
-    scrollRestoration: true,
-    // FIXED - Disable font optimization to avoid Google Fonts timeout
-    //optimizeFonts: false,
-  },
+  // ==========================
+  // Server Components & Scroll Restoration
+  // ==========================
+  serverExternalPackages: ['@supabase/supabase-js'],
 
+  // ==========================
   // On-demand entries (development performance)
+  // ==========================
   onDemandEntries: {
     maxInactiveAge: 25 * 1000,
     pagesBufferLength: 2,
   },
 
+  // ==========================
   // Compiler options
+  // ==========================
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
+
+  // ==========================
+  // Turbopack config (empty to suppress errors)
+  // ==========================
+  turbopack: {},
 };
 
 module.exports = withPWA(nextConfig);
+

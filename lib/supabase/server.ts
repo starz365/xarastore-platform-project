@@ -3,8 +3,8 @@ import { cookies } from 'next/headers';
 import { Database } from '@/types/supabase';
 import { withRetry } from '@/lib/network/retry';
 
-export const createClient = () => {
-  const cookieStore = cookies();
+export const createClient = async () => {
+  const cookieStore = await cookies(); // ← await added
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,18 +20,12 @@ export const createClient = () => {
         set(name: string, value: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value, ...options });
-          } catch (error) {
-            // The `set` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing user sessions.
-          }
+          } catch (error) {}
         },
         remove(name: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value: '', ...options });
-          } catch (error) {
-            // The `remove` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing user sessions.
-          }
+          } catch (error) {}
         },
       },
     }
@@ -39,7 +33,7 @@ export const createClient = () => {
 };
 
 export const getSession = async () => {
-  const supabase = createClient();
+  const supabase = await createClient(); // ← await
   const {
     data: { session },
     error,
@@ -57,7 +51,7 @@ export const getUser = async () => {
   const session = await getSession();
   if (!session) return null;
 
-  const supabase = createClient();
+  const supabase = await createClient(); // ← await
   const { data: user, error } = await supabase
     .from('users')
     .select('*')
@@ -89,7 +83,7 @@ export const checkRole = async (requiredRole: string) => {
     throw new Error('Authentication required');
   }
 
-  const supabase = createClient();
+  const supabase = await createClient(); // ← await
   const { data: user, error } = await supabase
     .from('users')
     .select('role')
@@ -118,9 +112,7 @@ export const getServiceRoleClient = () => {
         persistSession: false,
       },
       cookies: {
-        get() {
-          return undefined;
-        },
+        get() { return undefined; },
         set() {},
         remove() {},
       },
@@ -136,13 +128,8 @@ export const withAuth = async (
     return await handler(session);
   } catch (error: any) {
     return new Response(
-      JSON.stringify({
-        error: error.message || 'Authentication failed',
-      }),
-      {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ error: error.message || 'Authentication failed' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
   }
 };
@@ -156,9 +143,7 @@ export const withRole = async (
     return await handler(session);
   } catch (error: any) {
     return new Response(
-      JSON.stringify({
-        error: error.message || 'Authorization failed',
-      }),
+      JSON.stringify({ error: error.message || 'Authorization failed' }),
       {
         status: error.message?.includes('Authentication') ? 401 : 403,
         headers: { 'Content-Type': 'application/json' },
@@ -179,6 +164,6 @@ export const safeDbOperation = async <T>(
   }
 };
 
-
-export const supabase = createClient();
-
+// ← REMOVED: export const supabase = createClient();
+//    This ran at module load time outside a request context and caused the crash.
+//    Call createClient() directly inside each function that needs it.

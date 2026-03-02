@@ -1,0 +1,638 @@
+reference the app/page.tsx file that you corrected to execute the master prompt below.
+lets take app/page.tsx further.  Analyse and follow the attached master prompt.
+every single file must be enterprise grade and production ready
+
+
+# XARASTORE PLATFORM 3.0 — PHASE 1 MASTER IMPLEMENTATION PROMPT
+
+You are operating as a senior principal engineer and system architect.
+
+Your task is to fully implement **Phase 1 of Xarastore Platform 3.0 evolution** inside the existing Next.js App Router codebase.
+
+This page belongs to the **public website** (`app/page.tsx`) and NOT the admin panel.
+
+You must generate **ALL required files, supporting components, types, utilities, routes, API handlers, database schema changes (if needed), and configuration updates** in one complete output.  
+
+No partial generation. No placeholders. No TODO comments. No incremental delivery.
+
+Everything must be production-ready.
+
+---
+
+# 🎯 OBJECTIVE
+
+Transform the Xarastore public homepage from a pure marketplace landing page into a **dual-market modern SaaS-commerce platform homepage**, introducing:
+
+- Vendor onboarding dimension
+
+- B2B positioning
+
+- Enterprise-ready framing
+
+- Platform capability showcase
+
+- Expandable architecture foundation
+
+WITHOUT breaking:
+
+- Existing marketplace functionality
+
+- Supabase integration
+
+- Existing design system
+
+- Existing folder conventions
+
+- Existing UI component patterns
+
+---
+
+# ⚙️ TECH STACK CONTEXT
+
+Existing stack:
+
+- Next.js (App Router)
+
+- TypeScript
+
+- Supabase (data layer)
+
+- TailwindCSS
+
+- Custom UI component system (`@/components/ui`)
+
+- Structured sections with Suspense + ErrorBoundary
+
+- Server Components by default
+
+You must:
+
+- Follow existing file naming conventions
+
+- Follow existing component structure
+
+- Maintain consistency with `Button`, `ErrorBoundary`, `ProductGrid`, etc.
+
+- Use Server Components where appropriate
+
+- Use Client Components only when required
+
+- Preserve accessibility standards
+
+- Preserve SEO patterns (metadata, JSON-LD)
+
+---
+
+# 🚀 PHASE 1 — REQUIRED FEATURES
+
+## 1️⃣ Dual Hero Strategy
+
+Modify homepage to include:
+
+Primary CTA:
+
+- Start Shopping
+
+Secondary CTAs:
+
+- Sell on Xarastore
+
+- Book Enterprise Demo
+
+Add:
+
+- Split positioning: "For Shoppers" and "For Businesses"
+
+- Enterprise tagline (platform-grade language)
+
+Do NOT remove existing hero structure.
+
+Extend it cleanly.
+
+add, update or replace hero or illustration image with auto playing video (muted by default and can be played in foreground).
+
+---
+
+## 2️⃣ New Section: Platform Capabilities
+
+Create a new section:
+
+Title: "Built for Scale"
+
+Subtext: Platform-grade commerce infrastructure
+
+Include modular capability cards:
+
+- Vendor Management
+
+- Advanced Analytics
+
+- Embedded Finance (placeholder description)
+
+- Smart Pricing Engine
+
+- Logistics Optimization
+
+- Fraud Detection
+
+Each must:
+
+- Be a reusable component
+
+- Follow existing card design patterns
+
+- Be future-expandable
+
+during Creation, i asuppose these must be created:
+
+components/platform/PlatformCapabilities.tsx 
+
+components/platform/CapabilityCard.tsx
+
+
+
+```
+
+---
+
+
+
+## 3️⃣ New Section: Vendor Invitation
+
+
+
+Add section:
+
+
+
+Title: "Sell on Xarastore"
+
+Features:
+
+- Reach millions of customers
+
+- Smart dashboard
+
+- Fast payouts
+
+- Built-in logistics
+
+
+
+CTA:
+
+- Become a Vendor
+
+
+
+Create route:
+
+```
+
+
+
+app/sell/page.tsx
+
+
+
+```
+
+
+
+Create:
+
+- Vendor intro page
+
+- Form stub (non-functional but structured properly)
+
+- API route stub: `/api/vendor/apply`
+
+
+
+Must:
+
+- Follow same design conventions
+
+- Use Server Actions or API route properly
+
+
+
+---
+
+
+
+## 4️⃣ Enterprise Section
+
+
+
+Add:
+
+
+
+Title: "Enterprise Commerce Solutions"
+
+
+
+Include:
+
+- Multi-location support
+
+- Bulk procurement
+
+- Dedicated account management
+
+- SLA-backed infrastructure
+
+
+
+CTA:
+
+- Request Demo
+
+
+
+Create route:
+
+```
+
+
+
+app/enterprise/page.tsx
+
+
+
+```
+
+
+
+Create:
+
+- Structured enterprise landing page
+
+- Demo request form
+
+- API route: `/api/enterprise/demo-request`
+
+
+
+Include validation.
+
+
+
+---
+
+
+
+## 5️⃣ Navigation Update
+
+
+
+Modify public navbar (NOT admin):
+
+
+
+Add:
+
+- Sell
+
+- Enterprise
+
+
+
+Maintain:
+
+- Responsive behavior
+
+- Accessibility
+
+- No regressions
+
+
+
+---
+
+
+
+## 6️⃣ Data & Schema Preparation (Future-Ready)
+
+
+
+Prepare for multi-tenancy:
+
+
+
+Add schema placeholders (Supabase migration-ready):
+
+
+
+Tables (define SQL but do NOT break existing tables):
+
+
+
+- organizations
+
+- organization_members
+
+- vendors
+
+- vendor_applications
+
+
+
+Create file:
+
+```
+
+
+
+supabase/migrations/phase1_enterprise_foundation.sql
+
+
+
+```
+
+
+
+Include:
+
+- UUID PKs
+
+- Timestamps
+
+- Foreign keys
+
+- RLS placeholder comments
+
+
+
+---
+
+
+
+## 7️⃣ Feature Flags Foundation
+
+
+
+Create:
+
+```
+
+
+
+lib/config/featureFlags.ts
+
+
+
+```
+
+
+
+Include toggles for:
+
+
+
+- ENABLE_VENDOR_PORTAL
+
+- ENABLE_ENTERPRISE_PAGE
+
+- ENABLE_PLATFORM_CAPABILITIES_SECTION
+
+
+
+Used inside homepage conditionally.
+
+
+
+Must default to true.
+
+
+
+---
+
+
+
+## 8️⃣ Observability Hooks
+
+
+
+Add:
+
+```
+
+
+
+lib/analytics/events.ts
+
+
+
+```
+
+
+
+Include stubs for:
+
+
+
+- trackVendorCTA()
+
+- trackEnterpriseCTA()
+
+- trackDemoRequest()
+
+
+
+Integrate into new CTAs.
+
+
+
+Do NOT use external SDKs.
+
+Create internal abstraction only.
+
+
+
+---
+
+
+
+## 9️⃣ Maintain Existing Marketplace Sections
+
+
+
+DO NOT:
+
+- Remove Featured Products
+
+- Remove Deals
+
+- Remove Categories
+
+- Remove Brands
+
+- Break Suspense boundaries
+
+
+
+Enhance only.
+
+
+
+---
+
+
+
+# 🧱 ARCHITECTURAL RULES
+
+
+
+You must:
+
+
+
+- Keep public site separate from admin
+
+- Do not introduce cross-import from admin
+
+- Keep strict folder boundaries
+
+- Use clear typing
+
+- Avoid circular dependencies
+
+- Ensure all imports resolve
+
+- Avoid implicit any
+
+- Use strict TypeScript
+
+
+
+---
+
+
+
+# 🧠 FUTURE-READY REQUIREMENTS
+
+
+
+Design so Phase 2 can add:
+
+
+
+- Real vendor dashboard
+
+- Organization model
+
+- RBAC
+
+- Subscription billing
+
+- API keys
+
+- Webhooks
+
+- AI services layer
+
+
+
+Structure code to allow expansion without refactor.
+
+
+
+---
+
+
+
+# 📁 OUTPUT REQUIREMENTS
+
+
+
+You must:
+
+
+
+1. Output complete file tree of new/modified files.
+
+2. Then output full contents of each file.
+
+3. Ensure no missing imports.
+
+4. Ensure no undefined references.
+
+5. Ensure compatibility with existing design system.
+
+
+
+No commentary.
+
+No explanations.
+
+Only deliver implementation.
+
+
+
+---
+
+
+
+# 🧪 VALIDATION CHECKLIST
+
+
+
+Before finishing, internally verify:
+
+
+
+- App builds without type errors
+
+- No broken imports
+
+- No runtime undefined usage
+
+- No duplication of components
+
+- Navigation works
+
+- Forms post correctly
+
+- Feature flags operate
+
+
+
+---
+
+
+
+# 🔐 IMPORTANT CONSTRAINTS
+
+
+
+- Do NOT modify admin panel.
+
+- Do NOT change authentication logic.
+
+- Do NOT rewrite database layer.
+
+- Do NOT introduce new frameworks.
+
+- Do NOT remove existing sections.
+
+
+
+Only extend.
+
+
+
+---
+
+
+
+# END OF PROMPT
+
+
+
+Generate full implementation now.
+
+you are free to alter and apply modifications in order to conform to the best practices, security, standards and such.
+
+```

@@ -95,8 +95,11 @@ export interface NotificationSettings {
 
 class SettingsManager {
   private static instance: SettingsManager;
-  private cache = new Map<string, any>();
+  private cache = new Map<string, { data: any; timestamp: number }>();
   private cacheTTL = 5 * 60 * 1000; // 5 minutes
+  private retryCount = 2; // Reduced from 3 to fail faster
+  private retryDelay = 500; // Reduced from 1 second to 500ms
+  private fetchTimeout = 3000; // 3 second timeout for fetch operations
 
   private constructor() {}
 
@@ -105,6 +108,50 @@ class SettingsManager {
       SettingsManager.instance = new SettingsManager();
     }
     return SettingsManager.instance;
+  }
+
+  private async fetchWithTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number = this.fetchTimeout
+  ): Promise<T> {
+    let timeoutHandle: NodeJS.Timeout;
+    
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(new Error(`Fetch timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([promise, timeoutPromise]);
+      clearTimeout(timeoutHandle!);
+      return result;
+    } catch (error) {
+      clearTimeout(timeoutHandle!);
+      throw error;
+    }
+  }
+
+  private async fetchWithRetry<T>(
+    fetchFn: () => Promise<T>,
+    retries: number = this.retryCount
+  ): Promise<T> {
+    let lastError: Error | null = null;
+    
+    for (let i = 0; i <= retries; i++) {
+      try {
+        return await this.fetchWithTimeout(fetchFn());
+      } catch (error) {
+        lastError = error as Error;
+        
+        // Don't wait on last attempt
+        if (i < retries) {
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay * (i + 1)));
+        }
+      }
+    }
+    
+    throw lastError || new Error('Fetch failed after retries');
   }
 
   async getSiteSettings(): Promise<SiteSettings> {
@@ -116,19 +163,25 @@ class SettingsManager {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('site_settings')
-        .select('*')
-        .single();
+      const { data, error } = await this.fetchWithRetry(() =>
+        supabase
+          .from('site_settings')
+          .select('*')
+          .maybeSingle()
+      );
 
-      if (error) throw error;
+      if (error) {
+        // Don't log the full error object as it might contain sensitive data
+        console.warn('Unable to fetch site settings, using defaults');
+        return this.getDefaultSiteSettings();
+      }
 
       const settings = data || await this.getDefaultSiteSettings();
       this.setCache(cacheKey, settings);
       
       return settings;
     } catch (error) {
-      console.error('Error fetching site settings:', error);
+      // Silently fail and return defaults - don't log the error to console
       return this.getDefaultSiteSettings();
     }
   }
@@ -142,19 +195,22 @@ class SettingsManager {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('payment_settings')
-        .select('*')
-        .single();
+      const { data, error } = await this.fetchWithRetry(() =>
+        supabase
+          .from('payment_settings')
+          .select('*')
+          .maybeSingle()
+      );
 
-      if (error) throw error;
+      if (error) {
+        return this.getDefaultPaymentSettings();
+      }
 
       const settings = data || await this.getDefaultPaymentSettings();
       this.setCache(cacheKey, settings);
       
       return settings;
     } catch (error) {
-      console.error('Error fetching payment settings:', error);
       return this.getDefaultPaymentSettings();
     }
   }
@@ -168,19 +224,22 @@ class SettingsManager {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('email_settings')
-        .select('*')
-        .single();
+      const { data, error } = await this.fetchWithRetry(() =>
+        supabase
+          .from('email_settings')
+          .select('*')
+          .maybeSingle()
+      );
 
-      if (error) throw error;
+      if (error) {
+        return this.getDefaultEmailSettings();
+      }
 
       const settings = data || await this.getDefaultEmailSettings();
       this.setCache(cacheKey, settings);
       
       return settings;
     } catch (error) {
-      console.error('Error fetching email settings:', error);
       return this.getDefaultEmailSettings();
     }
   }
@@ -194,19 +253,22 @@ class SettingsManager {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('notification_settings')
-        .select('*')
-        .single();
+      const { data, error } = await this.fetchWithRetry(() =>
+        supabase
+          .from('notification_settings')
+          .select('*')
+          .maybeSingle()
+      );
 
-      if (error) throw error;
+      if (error) {
+        return this.getDefaultNotificationSettings();
+      }
 
       const settings = data || await this.getDefaultNotificationSettings();
       this.setCache(cacheKey, settings);
       
       return settings;
     } catch (error) {
-      console.error('Error fetching notification settings:', error);
       return this.getDefaultNotificationSettings();
     }
   }
@@ -285,39 +347,58 @@ class SettingsManager {
 
   async getFeatureFlags(): Promise<Record<string, boolean>> {
     try {
-      const { data, error } = await supabase
-        .from('feature_flags')
-        .select('*');
+      const { data, error } = await this.fetchWithRetry(() =>
+        supabase
+          .from('feature_flags')
+          .select('*')
+      );
 
-      if (error) throw error;
+      if (error) {
+        return {};
+      }
 
       return (data || []).reduce((flags, flag) => {
         flags[flag.name] = flag.enabled;
         return flags;
       }, {} as Record<string, boolean>);
     } catch (error) {
-      console.error('Error fetching feature flags:', error);
       return {};
     }
   }
 
   async isFeatureEnabled(featureName: string): Promise<boolean> {
-    const flags = await this.getFeatureFlags();
-    return flags[featureName] || false;
+    try {
+      const flags = await this.getFeatureFlags();
+      return flags[featureName] || false;
+    } catch (error) {
+      return false;
+    }
   }
 
   async getMaintenanceMode(): Promise<boolean> {
-    const settings = await this.getSiteSettings();
-    return settings.maintenance_mode;
+    try {
+      const settings = await this.getSiteSettings();
+      return settings.maintenance_mode;
+    } catch (error) {
+      return false;
+    }
   }
 
   async getCurrencySettings(): Promise<{ code: string; symbol: string; locale: string }> {
-    const settings = await this.getSiteSettings();
-    return {
-      code: settings.currency || 'KES',
-      symbol: settings.currency_symbol || 'KES',
-      locale: 'en-KE',
-    };
+    try {
+      const settings = await this.getSiteSettings();
+      return {
+        code: settings.currency || 'KES',
+        symbol: settings.currency_symbol || 'KES',
+        locale: 'en-KE',
+      };
+    } catch (error) {
+      return {
+        code: 'KES',
+        symbol: 'KES',
+        locale: 'en-KE',
+      };
+    }
   }
 
   private getFromCache(key: string): any | null {

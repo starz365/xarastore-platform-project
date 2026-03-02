@@ -1,0 +1,671 @@
+import { supabase } from '../client';
+import { Collection, CollectionWithProducts, PaginatedCollections, CollectionFilters, CollectionType, transformCollection } from '@/types/collections';
+import { Product } from '@/types';
+import { transformProduct } from './products';
+import { logger } from '@/lib/utils/logger';
+
+// Mock data for collection types when database column doesn't exist
+const MOCK_COLLECTION_TYPES = [
+  { type: 'seasonal', count: 0 },
+  { type: 'themed', count: 0 },
+  { type: 'editorial', count: 0 },
+  { type: 'trending', count: 0 },
+  { type: 'featured', count: 0 },
+  { type: 'new_arrivals', count: 0 },
+  { type: 'best_sellers', count: 0 },
+  { type: 'limited_time', count: 0 },
+];
+
+// Add timeout to fetch operations
+const FETCH_TIMEOUT = 10000; // 10 seconds
+
+async function fetchWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number = FETCH_TIMEOUT
+): Promise<T> {
+  let timeoutHandle: NodeJS.Timeout;
+  
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(`Fetch timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutHandle!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutHandle!);
+    throw error;
+  }
+}
+
+/**
+ * Get featured collections
+ * @param limit Maximum number of collections to return
+ */
+export async function getFeaturedCollections(limit: number = 6): Promise<Collection[]> {
+  try {
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(limit)
+    );
+
+    if (error) {
+      logger.error('Error fetching featured collections:', error);
+      return [];
+    }
+
+    return (data || []).map((collection, index) => ({
+      ...transformCollection(collection),
+      isFeatured: index < 3, // Mark first 3 as featured for UI purposes
+      type: collection.type || 'featured',
+    }));
+  } catch (error) {
+    // Don't log aborted requests
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
+    logger.error('Error fetching featured collections:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all active collections with pagination
+ * @param filters Optional filters for collections
+ */
+export async function getAllCollections(
+  filters?: CollectionFilters
+): Promise<PaginatedCollections> {
+  try {
+    const page = filters?.page || 1;
+    const pageSize = filters?.pageSize || 20;
+    const offset = (page - 1) * pageSize;
+
+    let query = supabase
+      .from('collections')
+      .select('*', { count: 'exact' })
+      .eq('is_active', true);
+
+    // Apply type filter if provided and if column exists (we'll handle gracefully)
+    if (filters?.type) {
+      // We'll apply type filter in memory after fetching
+      // This avoids errors if the column doesn't exist
+    }
+
+    if (filters?.search) {
+      query = query.or(`name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+    }
+
+    // Apply sorting (using available columns)
+    if (filters?.sortBy === 'name') {
+      query = query.order('name', { ascending: true });
+    } else if (filters?.sortBy === 'oldest') {
+      query = query.order('created_at', { ascending: true });
+    } else {
+      query = query.order('updated_at', { ascending: false });
+    }
+
+    // Apply pagination
+    query = query.range(offset, offset + pageSize - 1);
+
+    const { data, count, error } = await fetchWithTimeout(query);
+
+    if (error) {
+      logger.error('Error fetching all collections:', error);
+      return {
+        collections: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+      };
+    }
+
+    let collections = (data || []).map((collection, index) => ({
+      ...transformCollection(collection),
+      isFeatured: index < 3, // Mark first few as featured for UI
+      display_order: index, // Add display order for UI
+      type: collection.type || 'uncategorized',
+    }));
+
+    // Apply type filter in memory if needed
+    if (filters?.type) {
+      collections = collections.filter(c => c.type === filters.type);
+    }
+
+    const total = count || 0;
+
+    return {
+      collections,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return {
+        collections: [],
+        total: 0,
+        page: 1,
+        pageSize: 20,
+        totalPages: 0,
+      };
+    }
+    logger.error('Error fetching all collections:', error);
+    return {
+      collections: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+      totalPages: 0,
+    };
+  }
+}
+
+/**
+ * Get collection by slug with products
+ * @param slug Collection slug identifier
+ * @param includeProducts Whether to include products in the response
+ * @param productLimit Maximum number of products to return
+ */
+export async function getCollectionBySlug(
+  slug: string,
+  includeProducts: boolean = true,
+  productLimit: number = 50
+): Promise<CollectionWithProducts | null> {
+  try {
+    // First, get the collection
+    const { data: collectionData, error: collectionError } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('slug', slug)
+        .eq('is_active', true)
+        .single()
+    );
+
+    if (collectionError || !collectionData) {
+      return null;
+    }
+
+    const collection = transformCollection(collectionData);
+
+    // If products are not requested, return collection without products
+    if (!includeProducts) {
+      return {
+        ...collection,
+        products: [],
+      };
+    }
+
+    // Get products for this collection
+    const { data: productsData, error: productsError } = await fetchWithTimeout(
+      supabase
+        .from('collection_products')
+        .select(`
+          *,
+          product:products (
+            *,
+            brand:brands(*),
+            category:categories(*),
+            variants:product_variants(*)
+          )
+        `)
+        .eq('collection_id', collection.id)
+        .limit(productLimit)
+    );
+
+    if (productsError) {
+      logger.error(`Error fetching products for collection "${slug}":`, productsError);
+      return {
+        ...collection,
+        products: [],
+      };
+    }
+
+    const products = (productsData || [])
+      .map((item: any) => {
+        if (!item.product) return null;
+        return transformProduct(item.product);
+      })
+      .filter(Boolean) as Product[];
+
+    return {
+      ...collection,
+      products,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return null;
+    }
+    logger.error(`Error fetching collection by slug "${slug}":`, error);
+    return null;
+  }
+}
+
+/**
+ * Get collections by type
+ * @param type Collection type to filter by
+ * @param limit Maximum number of collections to return
+ */
+export async function getCollectionsByType(
+  type: CollectionType,
+  limit: number = 20
+): Promise<Collection[]> {
+  try {
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('type', type)
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(limit)
+    );
+
+    if (error) {
+      // If error is about missing column, return empty array silently
+      if (error.message?.includes('column collections.type does not exist')) {
+        return [];
+      }
+      logger.error(`Error fetching collections by type "${type}":`, error);
+      return [];
+    }
+
+    return (data || []).map(transformCollection);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
+    logger.error(`Error fetching collections by type "${type}":`, error);
+    return [];
+  }
+}
+
+/**
+ * Get products in a collection with pagination
+ * @param collectionId Collection ID
+ * @param page Page number
+ * @param pageSize Number of products per page
+ * @param onlyInStock Whether to filter only in-stock products
+ */
+export async function getProductsInCollection(
+  collectionId: string,
+  page: number = 1,
+  pageSize: number = 24,
+  onlyInStock: boolean = false
+): Promise<{ products: Product[]; total: number; collection: Collection | null }> {
+  try {
+    // First, verify the collection exists and is active
+    const { data: collectionData, error: collectionError } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('id', collectionId)
+        .eq('is_active', true)
+        .single()
+    );
+
+    if (collectionError || !collectionData) {
+      return { products: [], total: 0, collection: null };
+    }
+
+    const collection = transformCollection(collectionData);
+    const offset = (page - 1) * pageSize;
+
+    // Build query for collection products
+    let query = supabase
+      .from('collection_products')
+      .select(
+        `
+        *,
+        product:products!inner (
+          *,
+          brand:brands(*),
+          category:categories(*),
+          variants:product_variants(*)
+        )
+      `,
+        { count: 'exact' }
+      )
+      .eq('collection_id', collectionId);
+
+    // Filter for in-stock products if requested
+    if (onlyInStock) {
+      query = query.filter('product.stock', 'gt', 0);
+    }
+
+    // Apply pagination
+    const { data, count, error } = await fetchWithTimeout(
+      query.range(offset, offset + pageSize - 1)
+    );
+
+    if (error) {
+      logger.error(`Error fetching products for collection "${collectionId}":`, error);
+      return { products: [], total: 0, collection };
+    }
+
+    const products = (data || [])
+      .map((item: any) => {
+        if (!item.product) return null;
+        return transformProduct(item.product);
+      })
+      .filter(Boolean) as Product[];
+
+    return {
+      products,
+      total: count || 0,
+      collection,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { products: [], total: 0, collection: null };
+    }
+    logger.error(`Error fetching products for collection "${collectionId}":`, error);
+    return { products: [], total: 0, collection: null };
+  }
+}
+
+/**
+ * Get collections containing a specific product
+ * @param productId Product ID
+ * @param limit Maximum number of collections to return
+ */
+export async function getCollectionsForProduct(
+  productId: string,
+  limit: number = 5
+): Promise<Collection[]> {
+  try {
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collection_products')
+        .select(`
+          *,
+          collection:collections!inner (*)
+        `)
+        .eq('product_id', productId)
+        .eq('collection.is_active', true)
+        .limit(limit)
+    );
+
+    if (error) {
+      logger.error(`Error fetching collections for product "${productId}":`, error);
+      return [];
+    }
+
+    return (data || [])
+      .map((item: any) => item.collection)
+      .filter(Boolean)
+      .map(transformCollection);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
+    logger.error(`Error fetching collections for product "${productId}":`, error);
+    return [];
+  }
+}
+
+/**
+ * Get collection types with counts
+ * Returns all collection types with the number of active collections in each
+ */
+export async function getCollectionTypesWithCounts(): Promise<Array<{
+  type: string;
+  count: number;
+}>> {
+  try {
+    // First check if type column exists by trying to select it
+    const { data: testData, error: testError } = await supabase
+      .from('collections')
+      .select('type')
+      .limit(1);
+
+    // If there's an error about the column not existing, return mock data
+    if (testError && testError.message?.includes('column collections.type does not exist')) {
+      return MOCK_COLLECTION_TYPES;
+    }
+
+    // If column exists, proceed with actual query
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('type, id')
+        .eq('is_active', true)
+    );
+
+    if (error) {
+      logger.error('Error fetching collection types with counts:', error);
+      return MOCK_COLLECTION_TYPES;
+    }
+
+    // Group by type and count in JavaScript
+    const typeCounts = (data || []).reduce((acc: Record<string, number>, item) => {
+      const type = item.type || 'uncategorized';
+      if (!acc[type]) {
+        acc[type] = 0;
+      }
+      acc[type]++;
+      return acc;
+    }, {});
+
+    // Convert to array format
+    return Object.entries(typeCounts).map(([type, count]) => ({
+      type,
+      count: count as number,
+    }));
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return MOCK_COLLECTION_TYPES;
+    }
+    logger.error('Error fetching collection types with counts:', error);
+    return MOCK_COLLECTION_TYPES;
+  }
+}
+
+/**
+ * Get trending collections (based on recent updates)
+ * @param limit Maximum number of collections to return
+ */
+export async function getTrendingCollections(limit: number = 8): Promise<Collection[]> {
+  try {
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(limit)
+    );
+
+    if (error) {
+      logger.error('Error fetching trending collections:', error);
+      return [];
+    }
+
+    return (data || []).map((collection, index) => ({
+      ...transformCollection(collection),
+      type: collection.type || 'trending',
+    }));
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
+    logger.error('Error fetching trending collections:', error);
+    return [];
+  }
+}
+
+/**
+ * Search collections by name or description
+ * @param query Search query
+ * @param limit Maximum number of results to return
+ */
+export async function searchCollections(
+  query: string,
+  limit: number = 10
+): Promise<Collection[]> {
+  try {
+    if (!query.trim()) {
+      return [];
+    }
+
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('is_active', true)
+        .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
+        .order('updated_at', { ascending: false })
+        .limit(limit)
+    );
+
+    if (error) {
+      logger.error('Error searching collections:', error);
+      return [];
+    }
+
+    return (data || []).map(transformCollection);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
+    logger.error('Error searching collections:', error);
+    return [];
+  }
+}
+
+/**
+ * Check if a collection exists and is active
+ * @param slug Collection slug
+ */
+export async function collectionExists(slug: string): Promise<boolean> {
+  try {
+    const { count, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*', { count: 'exact', head: true })
+        .eq('slug', slug)
+        .eq('is_active', true)
+    );
+
+    if (error) {
+      logger.error(`Error checking if collection exists "${slug}":`, error);
+      return false;
+    }
+
+    return (count || 0) > 0;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return false;
+    }
+    logger.error(`Error checking if collection exists "${slug}":`, error);
+    return false;
+  }
+}
+
+/**
+ * Get similar collections (same type)
+ * @param collectionId Current collection ID
+ * @param limit Maximum number of similar collections to return
+ */
+export async function getSimilarCollections(
+  collectionId: string,
+  limit: number = 4
+): Promise<Collection[]> {
+  try {
+    // First, get the current collection
+    const { data: currentCollection, error: collectionError } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('type')
+        .eq('id', collectionId)
+        .single()
+    );
+
+    if (collectionError || !currentCollection) {
+      return [];
+    }
+
+    // If type column doesn't exist or type is null, return recent collections
+    if (!currentCollection.type) {
+      const { data: recentData } = await fetchWithTimeout(
+        supabase
+          .from('collections')
+          .select('*')
+          .neq('id', collectionId)
+          .eq('is_active', true)
+          .order('updated_at', { ascending: false })
+          .limit(limit)
+      );
+      return (recentData || []).map(transformCollection);
+    }
+
+    // Find collections with the same type, excluding the current one
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('type', currentCollection.type)
+        .neq('id', collectionId)
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(limit)
+    );
+
+    if (error) {
+      // If error is about missing column, return recent collections
+      if (error.message?.includes('column collections.type does not exist')) {
+        const { data: recentData } = await fetchWithTimeout(
+          supabase
+            .from('collections')
+            .select('*')
+            .neq('id', collectionId)
+            .eq('is_active', true)
+            .order('updated_at', { ascending: false })
+            .limit(limit)
+        );
+        return (recentData || []).map(transformCollection);
+      }
+      logger.error(`Error fetching similar collections for "${collectionId}":`, error);
+      return [];
+    }
+
+    // If we don't have enough same-type collections, fill with recent ones
+    if ((data?.length || 0) < limit) {
+      const remaining = limit - (data?.length || 0);
+      const { data: recentData } = await fetchWithTimeout(
+        supabase
+          .from('collections')
+          .select('*')
+          .neq('id', collectionId)
+          .eq('is_active', true)
+          .order('updated_at', { ascending: false })
+          .limit(remaining)
+      );
+
+      const allCollections = [
+        ...(data || []),
+        ...(recentData || []),
+      ].slice(0, limit);
+
+      return allCollections.map(transformCollection);
+    }
+
+    return (data || []).map(transformCollection);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
+    logger.error(`Error fetching similar collections for "${collectionId}":`, error);
+    return [];
+  }
+}

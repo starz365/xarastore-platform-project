@@ -25,7 +25,6 @@ import { getFeaturedProducts, getDeals, getCategories, getBrands } from '@/lib/s
 import { getStats } from '@/lib/supabase/queries/stats';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 
-// Type definitions for better type safety
 interface TrustIndicator {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
@@ -60,7 +59,6 @@ interface Stats {
   categories?: number;
 }
 
-// Metadata for SEO
 export const metadata: Metadata = {
   title: 'Xarastore - Kenya\'s Fastest-Growing Marketplace | Shop Electronics, Fashion & More',
   description: 'Discover amazing products at unbeatable prices on Xarastore. Shop electronics, fashion, home goods, and more with free delivery, secure payment, and 30-day returns.',
@@ -82,7 +80,6 @@ export const metadata: Metadata = {
   },
 };
 
-// Trust indicators configuration
 const trustIndicators: TrustIndicator[] = [
   {
     icon: Truck,
@@ -118,10 +115,9 @@ const trustIndicators: TrustIndicator[] = [
     description: '24/7 Support',
     color: 'text-amber-600',
     bgColor: 'bg-amber-100',
-   },
+  },
 ];
 
-// App features configuration
 const appFeatures: AppFeature[] = [
   {
     icon: Sparkles,
@@ -146,7 +142,6 @@ const appFeatures: AppFeature[] = [
 ];
 
 export default async function HomePage() {
-  // Parallel data fetching with error handling
   const [
     featuredProductsResult,
     dealsResult,
@@ -161,7 +156,6 @@ export default async function HomePage() {
     getStats(),
   ]);
 
-  // Extract data with fallbacks
   const featuredProducts = featuredProductsResult.status === 'fulfilled' ? featuredProductsResult.value : [];
   const deals = dealsResult.status === 'fulfilled' ? dealsResult.value : [];
   const categories = categoriesResult.status === 'fulfilled' ? categoriesResult.value : [];
@@ -171,7 +165,7 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section 
+      <section
         className="relative bg-gradient-to-r from-red-600 to-red-800 text-white overflow-hidden"
         aria-labelledby="hero-heading"
       >
@@ -192,7 +186,7 @@ export default async function HomePage() {
             <div className="space-y-6">
               <div className="inline-flex items-center px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full">
                 <Star className="w-4 h-4 mr-2" aria-hidden="true" />
-                <span className="text-sm font-medium">Kenya's Fastest-Growing Marketplace</span>  
+                <span className="text-sm font-medium">Kenya's Fastest-Growing Marketplace</span>
               </div>
 
               <h1 id="hero-heading" className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
@@ -209,18 +203,18 @@ export default async function HomePage() {
               </p>
 
               <div className="flex flex-wrap gap-4">
-                <Button asChild variant="secondary" size="lg" className="shadow-lg">
-                  <Link href="/shop">
+                <Link href="/shop">
+                  <Button variant="secondary" size="lg" className="shadow-lg">
                     Start Shopping
                     <ArrowRight className="ml-2 w-5 h-5" aria-hidden="true" />
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="lg" className="text-white border-white hover:bg-white/10">
-                  <Link href="/deals">
+                  </Button>
+                </Link>
+                <Link href="/deals">
+                  <Button variant="outline" size="lg" className="text-white border-white hover:bg-white/10">
                     View Deals
                     <Tag className="ml-2 w-5 h-5" aria-hidden="true" />
-                  </Link>
-                </Button>
+                  </Button>
+                </Link>
               </div>
 
               {/* Stats */}
@@ -258,7 +252,6 @@ export default async function HomePage() {
                 />
               </div>
 
-              {/* Floating Elements */}
               <div className="absolute -top-4 -right-4 bg-white text-gray-900 p-3 rounded-xl shadow-lg animate-float">
                 <div className="flex items-center space-x-2">
                   <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
@@ -288,10 +281,7 @@ export default async function HomePage() {
       </section>
 
       {/* Trust Indicators */}
-      <section 
-        className="py-8 bg-gray-50" 
-        aria-labelledby="trust-indicators-heading"
-      >
+      <section className="py-8 bg-gray-50" aria-labelledby="trust-indicators-heading">
         <div className="container-responsive">
           <h2 id="trust-indicators-heading" className="sr-only">Trust Indicators</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -320,12 +310,10 @@ export default async function HomePage() {
               </h2>
               <p className="text-gray-600 mt-2">Handpicked just for you</p>
             </div>
-            <Button asChild variant="link">
-              <Link href="/shop" className="inline-flex items-center">
-                View All
-                <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
-              </Link>
-            </Button>
+            <Link href="/shop" className="inline-flex items-center text-red-600 hover:text-red-700 font-medium transition-colors">
+              View All
+              <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
+            </Link>
           </div>
 
           <ErrorBoundary
@@ -338,9 +326,9 @@ export default async function HomePage() {
                 <p className="text-gray-600 mb-6 max-w-md mx-auto">
                   We're having trouble loading featured products. Please try again later.
                 </p>
-                <Button asChild variant="primary">
-                  <Link href="/shop">Browse All Products</Link>
-                </Button>
+                <Link href="/shop">
+                  <Button variant="primary">Browse All Products</Button>
+                </Link>
               </div>
             }
           >
@@ -358,9 +346,9 @@ export default async function HomePage() {
                   <p className="text-gray-600 mb-6 max-w-md mx-auto">
                     Check back soon for amazing featured products!
                   </p>
-                  <Button asChild variant="primary">
-                    <Link href="/shop">Browse All Products</Link>
-                  </Button>
+                  <Link href="/shop">
+                    <Button variant="primary">Browse All Products</Button>
+                  </Link>
                 </div>
               )}
             </Suspense>
@@ -369,7 +357,7 @@ export default async function HomePage() {
       </section>
 
       {/* Hot Deals */}
-      <section 
+      <section
         className="py-12 md:py-16 bg-gradient-to-br from-red-50 to-orange-50"
         aria-labelledby="hot-deals-heading"
       >
@@ -402,9 +390,9 @@ export default async function HomePage() {
                 <p className="text-gray-600 mb-6 max-w-md mx-auto">
                   We're having trouble loading deals. Please try again later.
                 </p>
-                <Button asChild variant="primary">
-                  <Link href="/deals">View All Deals</Link>
-                </Button>
+                <Link href="/deals">
+                  <Button variant="primary">View All Deals</Button>
+                </Link>
               </div>
             }
           >
@@ -422,9 +410,9 @@ export default async function HomePage() {
                   <p className="text-gray-600 mb-6 max-w-md mx-auto">
                     Stay tuned for amazing deals coming soon!
                   </p>
-                  <Button asChild variant="primary">
-                    <Link href="/shop">Browse Products</Link>
-                  </Button>
+                  <Link href="/shop">
+                    <Button variant="primary">Browse Products</Button>
+                  </Link>
                 </div>
               )}
             </Suspense>
@@ -438,7 +426,6 @@ export default async function HomePage() {
         aria-labelledby="categories-heading"
       >
         <div className="container-responsive">
-          {/* Section Header */}
           <div className="mb-10 md:mb-12">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
               <div>
@@ -453,19 +440,17 @@ export default async function HomePage() {
                 </p>
               </div>
 
-              {/* View All Link - Desktop */}
               <Link
                 href="/categories"
                 className="hidden md:inline-flex items-center text-red-600 hover:text-red-700 font-medium transition-colors group"
                 aria-label="View all categories"
               >
                 <span className="mr-2">View All</span>
-                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" aria-hidden="true" /> 
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
               </Link>
             </div>
 
-            {/* Category Stats Bar */}
-            <div className="flex flex-wrap items-center gap-4 md:gap-6 text-sm text-gray-500">    
+            <div className="flex flex-wrap items-center gap-4 md:gap-6 text-sm text-gray-500">
               <div className="flex items-center">
                 <CheckCircle className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" aria-hidden="true" />
                 <span>100+ Categories</span>
@@ -481,7 +466,6 @@ export default async function HomePage() {
             </div>
           </div>
 
-          {/* Categories Content with Error Boundary */}
           <ErrorBoundary fallback={<CategoryErrorFallback />}>
             <Suspense fallback={<CategoryGridSkeleton />}>
               {categories && categories.length > 0 ? (
@@ -492,7 +476,6 @@ export default async function HomePage() {
                     priority
                   />
 
-                  {/* Mobile View All Link */}
                   <div className="md:hidden mt-8 text-center">
                     <Link
                       href="/categories"
@@ -515,13 +498,12 @@ export default async function HomePage() {
                   <p className="text-gray-600 mb-6 max-w-md mx-auto">
                     Categories will appear here once added to the system.
                   </p>
-                  <Button asChild variant="primary">
-                    <Link href="/shop">Browse Products</Link>
-                  </Button>
+                  <Link href="/shop">
+                    <Button variant="primary">Browse Products</Button>
+                  </Link>
                 </div>
               )}
 
-              {/* Performance Monitoring Marker */}
               <div
                 data-perf-marker="categories-loaded"
                 className="hidden"
@@ -530,7 +512,6 @@ export default async function HomePage() {
             </Suspense>
           </ErrorBoundary>
 
-          {/* SEO Structured Data (JSON-LD) */}
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{
@@ -538,7 +519,7 @@ export default async function HomePage() {
                 "@context": "https://schema.org",
                 "@type": "ItemList",
                 "name": "Product Categories",
-                "description": "Browse through our extensive collection of product categories",   
+                "description": "Browse through our extensive collection of product categories",
                 "numberOfItems": categories?.length || 0,
                 "itemListElement": categories?.map((category: Category, index: number) => ({
                   "@type": "ListItem",
@@ -557,7 +538,7 @@ export default async function HomePage() {
       </section>
 
       {/* Mobile App CTA */}
-      <section 
+      <section
         className="py-12 md:py-16 bg-gradient-to-r from-gray-900 to-gray-800 text-white"
         aria-labelledby="mobile-app-heading"
       >
@@ -617,12 +598,10 @@ export default async function HomePage() {
               </h2>
               <p className="text-gray-600 mt-2">Shop from trusted brands</p>
             </div>
-            <Button asChild variant="link">
-              <Link href="/brands" className="inline-flex items-center">
-                View All Brands
-                <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
-              </Link>
-            </Button>
+            <Link href="/brands" className="inline-flex items-center text-red-600 hover:text-red-700 font-medium transition-colors">
+              View All Brands
+              <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
+            </Link>
           </div>
 
           <ErrorBoundary
@@ -653,12 +632,12 @@ export default async function HomePage() {
                             src={brand.logo}
                             alt={`${brand.name} logo`}
                             fill
-                            className="object-contain group-hover:scale-105 transition-transform"   
+                            className="object-contain group-hover:scale-105 transition-transform"
                             sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 16vw"
                           />
                         </div>
                       ) : (
-                        <span className="font-semibold text-gray-800 group-hover:text-red-600 text-center">     
+                        <span className="font-semibold text-gray-800 group-hover:text-red-600 text-center">
                           {brand.name}
                         </span>
                       )}
@@ -706,9 +685,9 @@ export default async function HomePage() {
               required
               aria-required="true"
             />
-            <Button 
-              type="submit" 
-              variant="primary" 
+            <Button
+              type="submit"
+              variant="primary"
               className="whitespace-nowrap"
               aria-label="Subscribe to newsletter"
             >
@@ -717,7 +696,7 @@ export default async function HomePage() {
           </form>
 
           <p className="text-sm text-gray-500 mt-4">
-            By subscribing, you agree to our Privacy Policy and consent to receive updates.       
+            By subscribing, you agree to our Privacy Policy and consent to receive updates.
           </p>
         </div>
       </section>
@@ -725,7 +704,6 @@ export default async function HomePage() {
   );
 }
 
-// Category Error Fallback Component
 function CategoryErrorFallback() {
   return (
     <div className="text-center py-12" role="alert">
@@ -736,30 +714,26 @@ function CategoryErrorFallback() {
       <p className="text-gray-600 mb-6 max-w-md mx-auto">
         We're having trouble loading categories. Please try refreshing the page.
       </p>
-      <Button asChild variant="primary">
-        <Link href="/categories" className="inline-flex items-center">
+      <Link href="/categories" className="inline-flex items-center">
+        <Button variant="primary">
           View Categories
           <ArrowRight className="ml-2 w-4 h-4" aria-hidden="true" />
-        </Link>
-      </Button>
+        </Button>
+      </Link>
     </div>
   );
 }
 
-// Enhanced CategoryGridSkeleton Component
 function CategoryGridSkeleton() {
   return (
     <div className="space-y-8">
-      <div 
+      <div
         className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6"
         role="status"
         aria-label="Loading categories"
       >
         {Array.from({ length: 10 }).map((_, index) => (
-          <div
-            key={index}
-            className="relative overflow-hidden rounded-xl bg-gray-100"
-          >
+          <div key={index} className="relative overflow-hidden rounded-xl bg-gray-100">
             <div className="aspect-square w-full bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse" />
             <div className="p-4">
               <div className="h-4 bg-gray-200 rounded w-3/4 mb-2 animate-pulse" />
@@ -770,7 +744,6 @@ function CategoryGridSkeleton() {
         ))}
       </div>
 
-      {/* Mobile View All Link Skeleton */}
       <div className="md:hidden text-center pt-4">
         <div className="h-12 w-48 bg-gray-200 rounded-lg mx-auto animate-pulse" />
       </div>

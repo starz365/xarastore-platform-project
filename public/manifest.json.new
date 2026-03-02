@@ -1,0 +1,337 @@
+{
+  "name": "Xarastore - It's a Deal",
+  "short_name": "Xarastore",
+  "description": "Kenya's premier online marketplace. Shop electronics, fashion, home goods, and more with exclusive deals and secure payments.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "minimal-ui", "standalone"],
+  "background_color": "#ffffff",
+  "theme_color": "#dc2626",
+  "orientation": "portrait-primary",
+  "categories": ["shopping", "ecommerce", "retail", "marketplace"],
+  "lang": "en-KE",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "id": "com.xarastore.app",
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "screenshots": [
+    {
+      "src": "/images/screenshots/home.webp",
+      "sizes": "1080x1920",
+      "type": "image/webp",
+      "platform": "wide",
+      "label": "Xarastore Homepage - Browse amazing deals"
+    },
+    {
+      "src": "/images/screenshots/product.webp",
+      "sizes": "1080x1920",
+      "type": "image/webp",
+      "platform": "wide",
+      "label": "Product Details - View specifications and reviews"
+    },
+    {
+      "src": "/images/screenshots/cart.webp",
+      "sizes": "1080x1920",
+      "type": "image/webp",
+      "platform": "wide",
+      "label": "Shopping Cart - Review your items"
+    },
+    {
+      "src": "/images/screenshots/checkout.webp",
+      "sizes": "1080x1920",
+      "type": "image/webp",
+      "platform": "wide",
+      "label": "Secure Checkout with M-Pesa integration"
+    }
+  ],
+  "icons": [
+    {
+      "src": "/icons/icon-16x16.png",
+      "sizes": "16x16",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-48x48.png",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-256x256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Shop Deals",
+      "short_name": "Deals",
+      "description": "View current deals and promotions",
+      "url": "/deals",
+      "icons": [
+        {
+          "src": "/icons/shortcut-deals-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Shopping Cart",
+      "short_name": "Cart",
+      "description": "View your shopping cart",
+      "url": "/cart",
+      "icons": [
+        {
+          "src": "/icons/shortcut-cart-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "My Account",
+      "short_name": "Account",
+      "description": "Manage your account and orders",
+      "url": "/account",
+      "icons": [
+        {
+          "src": "/icons/shortcut-account-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Wishlist",
+      "short_name": "Wishlist",
+      "description": "View your saved items",
+      "url": "/account/wishlist",
+      "icons": [
+        {
+          "src": "/icons/shortcut-wishlist-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Track Order",
+      "short_name": "Track",
+      "description": "Track your latest order",
+      "url": "/account/orders",
+      "icons": [
+        {
+          "src": "/icons/shortcut-track-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Help & Support",
+      "short_name": "Help",
+      "description": "Get help with your orders",
+      "url": "/help",
+      "icons": [
+        {
+          "src": "/icons/shortcut-help-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=com.xarastore.app",
+      "id": "com.xarastore.app"
+    },
+    {
+      "platform": "itunes",
+      "url": "https://apps.apple.com/ke/app/xarastore/id123456789"
+    }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+xarastore",
+      "url": "/product/%s"
+    },
+    {
+      "protocol": "web+xarastore-deal",
+      "url": "/deals/%s"
+    }
+  ],
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "name",
+      "text": "description",
+      "url": "link",
+      "files": [
+        {
+          "name": "images",
+          "accept": ["image/*"]
+        }
+      ]
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "/upload",
+      "accept": {
+        "image/*": [".jpg", ".jpeg", ".png", ".webp"]
+      }
+    }
+  ],
+  "note_taking": {
+    "action": "/notes/new"
+  },
+  "url_handlers": [
+    {
+      "origin": "https://*.xarastore.com"
+    }
+  ],
+  "scope_extensions": [
+    {
+      "origin": "https://*.xarastore.com"
+    }
+  ],
+  "capture_links": "existing-client-navigate",
+  "permissions": {
+    "push": {
+      "description": "Receive notifications about deals and order updates"
+    },
+    "camera": {
+      "description": "Scan products and QR codes"
+    },
+    "geolocation": {
+      "description": "Find nearby stores and track deliveries"
+    },
+    "notifications": {
+      "description": "Get alerts for flash sales and order status"
+    }
+  },
+  "display_override": ["window-controls-overlay", "minimal-ui"],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "background_color": "#ffffff",
+  "theme_color": "#dc2626",
+  "categories": ["shopping", "business", "lifestyle"],
+  "iarc_rating_id": "ef27e3d2-6d3a-4b3e-8d5f-1c2e5a9b8d7c",
+  "features": [
+    "Cross-platform",
+    "Offline shopping",
+    "M-Pesa integration",
+    "Real-time tracking",
+    "Push notifications",
+    "Biometric login",
+    "Price alerts",
+    "Wishlist sync",
+    "Order history",
+    "Reviews & ratings"
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/home.webp",
+      "sizes": "1080x1920",
+      "type": "image/webp",
+      "platform": "narrow",
+      "label": "Homepage - Browse products and deals"
+    },
+    {
+      "src": "/screenshots/product.webp",
+      "sizes": "1080x1920",
+      "type": "image/webp",
+      "platform": "narrow",
+      "label": "Product details with specifications"
+    },
+    {
+      "src": "/screenshots/cart.webp",
+      "sizes": "1080x1920",
+      "type": "image/webp",
+      "platform": "narrow",
+      "label": "Shopping cart with M-Pesa payment"
+    },
+    {
+      "src": "/screenshots/checkout.webp",
+      "sizes": "1080x1920",
+      "type": "image/webp",
+      "platform": "narrow",
+      "label": "Secure checkout process"
+    }
+  ]
+}

@@ -1,30 +1,97 @@
 import { supabase } from '../client';
-import { Collection, CollectionWithProducts, PaginatedCollections, CollectionFilters, CollectionType, transformCollection } from '@/types/collections';
+import { Collection, CollectionWithProducts, PaginatedCollections, CollectionFilters, transformCollection } from '@/types/collections';
 import { Product } from '@/types';
 import { transformProduct } from './products';
+import { logger } from '@/lib/utils/logger';
+import { PostgrestError } from '@supabase/supabase-js';
+
+// Cache configuration for performance
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const cache = new Map<string, { data: any; timestamp: number }>();
+
+// Add timeout to fetch operations
+const FETCH_TIMEOUT = 15000; // 15 seconds
+
+async function fetchWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number = FETCH_TIMEOUT
+): Promise<T> {
+  let timeoutHandle: NodeJS.Timeout;
+  
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(`Database query timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutHandle!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutHandle!);
+    throw error;
+  }
+}
+
+function getFromCache<T>(key: string): T | null {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data as T;
+  }
+  if (cached) cache.delete(key);
+  return null;
+}
+
+function setCache(key: string, data: any): void {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
+function clearCache(key?: string): void {
+  if (key) {
+    cache.delete(key);
+  } else {
+    cache.clear();
+  }
+}
 
 /**
  * Get featured collections
  * @param limit Maximum number of collections to return
  */
 export async function getFeaturedCollections(limit: number = 6): Promise<Collection[]> {
+  const cacheKey = `featured_collections_${limit}`;
+  const cached = getFromCache<Collection[]>(cacheKey);
+  if (cached) return cached;
+
   try {
-    const { data, error } = await supabase
-      .from('collections')
-      .select('*')
-      .eq('is_featured', true)
-      .eq('is_active', true)
-      .lte('start_date', new Date().toISOString())
-      .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
-      .order('display_order', { ascending: true })
-      .order('updated_at', { ascending: false })
-      .limit(limit);
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('is_featured', true)
+        .eq('is_active', true)
+        .order('display_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(limit)
+    );
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Error fetching featured collections:', { error: error.message, code: error.code });
+      return [];
+    }
 
-    return (data || []).map(transformCollection);
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    const collections = data.map(transformCollection);
+    setCache(cacheKey, collections);
+    return collections;
   } catch (error) {
-    console.error('Error fetching featured collections:', error);
+    logger.error('Failed to fetch featured collections:', { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     return [];
   }
 }
@@ -41,12 +108,16 @@ export async function getAllCollections(
     const pageSize = filters?.pageSize || 20;
     const offset = (page - 1) * pageSize;
 
+    // Build cache key from filters
+    const cacheKey = `all_collections_${page}_${pageSize}_${filters?.type || ''}_${filters?.sortBy || ''}_${filters?.search || ''}`;
+    const cached = getFromCache<PaginatedCollections>(cacheKey);
+    if (cached) return cached;
+
+    // Start building the query
     let query = supabase
       .from('collections')
       .select('*', { count: 'exact' })
-      .eq('is_active', true)
-      .lte('start_date', new Date().toISOString())
-      .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`);
+      .eq('is_active', true);
 
     // Apply filters
     if (filters?.type) {
@@ -61,40 +132,60 @@ export async function getAllCollections(
       query = query.or(`name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
     }
 
-    // Apply sorting
+    // Apply sorting based on database schema
     switch (filters?.sortBy) {
-      case 'oldest':
-        query = query.order('created_at', { ascending: true });
-        break;
       case 'name':
         query = query.order('name', { ascending: true });
         break;
-      case 'product_count':
-        query = query.order('product_count', { ascending: false });
+      case 'oldest':
+        query = query.order('created_at', { ascending: true });
+        break;
+      case 'products':
+        // If product_count exists in schema, use it, otherwise sort by updated_at
+        query = query.order('product_count', { ascending: false, nullsFirst: false })
+                     .order('updated_at', { ascending: false });
+        break;
+      case 'popular':
+        query = query.order('view_count', { ascending: false, nullsFirst: false })
+                     .order('updated_at', { ascending: false });
         break;
       default: // 'newest'
-        query = query.order('updated_at', { ascending: false });
+        query = query.order('created_at', { ascending: false });
     }
 
     // Apply pagination
-    query = query.order('display_order', { ascending: true }).range(offset, offset + pageSize - 1);
+    query = query.range(offset, offset + pageSize - 1);
 
-    const { data, count, error } = await query;
+    const { data, count, error } = await fetchWithTimeout(query);
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Error fetching all collections:', { error: error.message, code: error.code });
+      return {
+        collections: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+      };
+    }
 
-    const total = count || 0;
     const collections = (data || []).map(transformCollection);
+    const total = count || 0;
 
-    return {
+    const result = {
       collections,
       total,
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
     };
+
+    setCache(cacheKey, result);
+    return result;
   } catch (error) {
-    console.error('Error fetching all collections:', error);
+    logger.error('Failed to fetch all collections:', { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     return {
       collections: [],
       total: 0,
@@ -116,16 +207,34 @@ export async function getCollectionBySlug(
   includeProducts: boolean = true,
   productLimit: number = 50
 ): Promise<CollectionWithProducts | null> {
+  const cacheKey = `collection_${slug}_${includeProducts}_${productLimit}`;
+  const cached = getFromCache<CollectionWithProducts | null>(cacheKey);
+  if (cached !== null) return cached;
+
   try {
     // First, get the collection
-    const { data: collectionData, error: collectionError } = await supabase
-      .from('collections')
-      .select('*')
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .single();
+    const { data: collectionData, error: collectionError } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('slug', slug)
+        .eq('is_active', true)
+        .single()
+    );
 
-    if (collectionError || !collectionData) {
+    if (collectionError) {
+      if (collectionError.code === 'PGRST116') {
+        // No rows returned
+        return null;
+      }
+      logger.error(`Error fetching collection by slug "${slug}":`, { 
+        error: collectionError.message, 
+        code: collectionError.code 
+      });
+      return null;
+    }
+
+    if (!collectionData) {
       return null;
     }
 
@@ -133,30 +242,73 @@ export async function getCollectionBySlug(
 
     // If products are not requested, return collection without products
     if (!includeProducts) {
-      return {
-        ...collection,
-        products: [],
-      };
+      const result = { ...collection, products: [] };
+      setCache(cacheKey, result);
+      return result;
     }
 
     // Get products for this collection
-    const { data: productsData, error: productsError } = await supabase
-      .from('collection_products')
-      .select(`
-        *,
-        product:products (
-          *,
-          brand:brands(*),
-          category:categories(*),
-          variants:product_variants(*)
-        )
-      `)
-      .eq('collection_id', collection.id)
-      .order('display_order', { ascending: true })
-      .order('is_featured_in_collection', { ascending: false })
-      .limit(productLimit);
+    const { data: productsData, error: productsError } = await fetchWithTimeout(
+      supabase
+        .from('collection_products')
+        .select(`
+          product:products (
+            id,
+            slug,
+            name,
+            description,
+            price,
+            original_price,
+            sku,
+            stock,
+            images,
+            specifications,
+            rating,
+            review_count,
+            is_featured,
+            is_deal,
+            deal_ends_at,
+            created_at,
+            updated_at,
+            brand:brands (
+              id,
+              slug,
+              name,
+              logo,
+              product_count
+            ),
+            category:categories (
+              id,
+              slug,
+              name,
+              product_count
+            ),
+            variants:product_variants (
+              id,
+              name,
+              price,
+              original_price,
+              sku,
+              stock,
+              attributes
+            )
+          )
+        `)
+        .eq('collection_id', collection.id)
+        .order('display_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(productLimit)
+    );
 
-    if (productsError) throw productsError;
+    if (productsError) {
+      logger.error(`Error fetching products for collection "${slug}":`, { 
+        error: productsError.message, 
+        code: productsError.code 
+      });
+      const result = { ...collection, products: [] };
+      setCache(cacheKey, result);
+      return result;
+    }
 
     const products = (productsData || [])
       .map((item: any) => {
@@ -165,12 +317,27 @@ export async function getCollectionBySlug(
       })
       .filter(Boolean) as Product[];
 
-    return {
-      ...collection,
-      products,
-    };
+    // Update view count asynchronously (don't await)
+    supabase
+      .from('collections')
+      .update({ view_count: (collectionData.view_count || 0) + 1 })
+      .eq('id', collection.id)
+      .then(({ error }) => {
+        if (error) {
+          logger.error('Failed to update collection view count:', { 
+            collectionId: collection.id, 
+            error: error.message 
+          });
+        }
+      });
+
+    const result = { ...collection, products };
+    setCache(cacheKey, result);
+    return result;
   } catch (error) {
-    console.error(`Error fetching collection by slug "${slug}":`, error);
+    logger.error(`Failed to fetch collection by slug "${slug}":`, { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     return null;
   }
 }
@@ -181,26 +348,40 @@ export async function getCollectionBySlug(
  * @param limit Maximum number of collections to return
  */
 export async function getCollectionsByType(
-  type: CollectionType,
+  type: string,
   limit: number = 20
 ): Promise<Collection[]> {
+  const cacheKey = `collections_by_type_${type}_${limit}`;
+  const cached = getFromCache<Collection[]>(cacheKey);
+  if (cached) return cached;
+
   try {
-    const { data, error } = await supabase
-      .from('collections')
-      .select('*')
-      .eq('type', type)
-      .eq('is_active', true)
-      .lte('start_date', new Date().toISOString())
-      .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
-      .order('display_order', { ascending: true })
-      .order('updated_at', { ascending: false })
-      .limit(limit);
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('type', type)
+        .eq('is_active', true)
+        .order('display_order', { ascending: true, nullsFirst: false })
+        .order('product_count', { ascending: false, nullsFirst: false })
+        .limit(limit)
+    );
 
-    if (error) throw error;
+    if (error) {
+      logger.error(`Error fetching collections by type "${type}":`, { 
+        error: error.message, 
+        code: error.code 
+      });
+      return [];
+    }
 
-    return (data || []).map(transformCollection);
+    const collections = (data || []).map(transformCollection);
+    setCache(cacheKey, collections);
+    return collections;
   } catch (error) {
-    console.error(`Error fetching collections by type "${type}":`, error);
+    logger.error(`Failed to fetch collections by type "${type}":`, { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     return [];
   }
 }
@@ -218,16 +399,29 @@ export async function getProductsInCollection(
   pageSize: number = 24,
   onlyInStock: boolean = false
 ): Promise<{ products: Product[]; total: number; collection: Collection | null }> {
+  const cacheKey = `products_in_collection_${collectionId}_${page}_${pageSize}_${onlyInStock}`;
+  const cached = getFromCache<{ products: Product[]; total: number; collection: Collection | null }>(cacheKey);
+  if (cached) return cached;
+
   try {
     // First, verify the collection exists and is active
-    const { data: collectionData, error: collectionError } = await supabase
-      .from('collections')
-      .select('*')
-      .eq('id', collectionId)
-      .eq('is_active', true)
-      .single();
+    const { data: collectionData, error: collectionError } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('id', collectionId)
+        .eq('is_active', true)
+        .single()
+    );
 
-    if (collectionError || !collectionData) {
+    if (collectionError) {
+      if (collectionError.code === 'PGRST116') {
+        return { products: [], total: 0, collection: null };
+      }
+      logger.error(`Error fetching collection "${collectionId}":`, { 
+        error: collectionError.message, 
+        code: collectionError.code 
+      });
       return { products: [], total: 0, collection: null };
     }
 
@@ -239,12 +433,46 @@ export async function getProductsInCollection(
       .from('collection_products')
       .select(
         `
-        *,
         product:products!inner (
-          *,
-          brand:brands(*),
-          category:categories(*),
-          variants:product_variants(*)
+          id,
+          slug,
+          name,
+          description,
+          price,
+          original_price,
+          sku,
+          stock,
+          images,
+          specifications,
+          rating,
+          review_count,
+          is_featured,
+          is_deal,
+          deal_ends_at,
+          created_at,
+          updated_at,
+          brand:brands (
+            id,
+            slug,
+            name,
+            logo,
+            product_count
+          ),
+          category:categories (
+            id,
+            slug,
+            name,
+            product_count
+          ),
+          variants:product_variants (
+            id,
+            name,
+            price,
+            original_price,
+            sku,
+            stock,
+            attributes
+          )
         )
       `,
         { count: 'exact' }
@@ -253,16 +481,24 @@ export async function getProductsInCollection(
 
     // Filter for in-stock products if requested
     if (onlyInStock) {
-      query = query.filter('product.stock', 'gt', 0);
+      query = query.gt('product.stock', 0);
     }
 
     // Apply pagination and ordering
-    const { data, count, error } = await query
-      .order('display_order', { ascending: true })
-      .order('is_featured_in_collection', { ascending: false })
-      .range(offset, offset + pageSize - 1);
+    const { data, count, error } = await fetchWithTimeout(
+      query
+        .order('display_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + pageSize - 1)
+    );
 
-    if (error) throw error;
+    if (error) {
+      logger.error(`Error fetching products for collection "${collectionId}":`, { 
+        error: error.message, 
+        code: error.code 
+      });
+      return { products: [], total: 0, collection };
+    }
 
     const products = (data || [])
       .map((item: any) => {
@@ -271,13 +507,18 @@ export async function getProductsInCollection(
       })
       .filter(Boolean) as Product[];
 
-    return {
+    const result = {
       products,
       total: count || 0,
       collection,
     };
+
+    setCache(cacheKey, result);
+    return result;
   } catch (error) {
-    console.error(`Error fetching products for collection "${collectionId}":`, error);
+    logger.error(`Failed to fetch products for collection "${collectionId}":`, { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     return { products: [], total: 0, collection: null };
   }
 }
@@ -291,26 +532,55 @@ export async function getCollectionsForProduct(
   productId: string,
   limit: number = 5
 ): Promise<Collection[]> {
+  const cacheKey = `collections_for_product_${productId}_${limit}`;
+  const cached = getFromCache<Collection[]>(cacheKey);
+  if (cached) return cached;
+
   try {
-    const { data, error } = await supabase
-      .from('collection_products')
-      .select(`
-        *,
-        collection:collections!inner (*)
-      `)
-      .eq('product_id', productId)
-      .eq('collection.is_active', true)
-      .order('collection.display_order', { ascending: true })
-      .limit(limit);
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collection_products')
+        .select(`
+          collection:collections!inner (
+            id,
+            name,
+            slug,
+            description,
+            image,
+            type,
+            product_count,
+            is_active,
+            is_featured,
+            display_order,
+            created_at,
+            updated_at
+          )
+        `)
+        .eq('product_id', productId)
+        .eq('collection.is_active', true)
+        .order('collection.display_order', { ascending: true, nullsFirst: false })
+        .limit(limit)
+    );
 
-    if (error) throw error;
+    if (error) {
+      logger.error(`Error fetching collections for product "${productId}":`, { 
+        error: error.message, 
+        code: error.code 
+      });
+      return [];
+    }
 
-    return (data || [])
+    const collections = (data || [])
       .map((item: any) => item.collection)
       .filter(Boolean)
       .map(transformCollection);
+
+    setCache(cacheKey, collections);
+    return collections;
   } catch (error) {
-    console.error(`Error fetching collections for product "${productId}":`, error);
+    logger.error(`Failed to fetch collections for product "${productId}":`, { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     return [];
   }
 }
@@ -320,72 +590,91 @@ export async function getCollectionsForProduct(
  * Returns all collection types with the number of active collections in each
  */
 export async function getCollectionTypesWithCounts(): Promise<Array<{
-  type: CollectionType;
+  type: string;
   count: number;
 }>> {
+  const cacheKey = 'collection_types_with_counts';
+  const cached = getFromCache<Array<{ type: string; count: number }>>(cacheKey);
+  if (cached) return cached;
+
   try {
-    const { data, error } = await supabase
-      .from('collections')
-      .select('type, count')
-      .eq('is_active', true)
-      .lte('start_date', new Date().toISOString())
-      .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
-      .group('type');
+    // Get all active collections and group by type
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('type, id')
+        .eq('is_active', true)
+        .not('type', 'is', null)
+    );
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Error fetching collection types with counts:', { 
+        error: error.message, 
+        code: error.code 
+      });
+      return [];
+    }
 
-    // Get all possible collection types from the database
-    const { data: typeData } = await supabase
-      .from('pg_enum')
-      .select('enumlabel')
-      .eq('enumtypid', (await supabase.from('pg_type').select('oid').eq('typname', 'collection_type').single()).data?.oid);
+    // Group by type and count
+    const typeCounts = (data || []).reduce((acc: Record<string, number>, item) => {
+      const type = item.type;
+      if (type) {
+        acc[type] = (acc[type] || 0) + 1;
+      }
+      return acc;
+    }, {});
 
-    const allTypes = (typeData || []).map(t => t.enumlabel as CollectionType);
+    // Convert to array format and sort by count descending
+    const result = Object.entries(typeCounts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
 
-    return allTypes.map(type => ({
-      type,
-      count: (data?.find(d => d.type === type)?.count || 0) as number,
-    }));
+    setCache(cacheKey, result);
+    return result;
   } catch (error) {
-    console.error('Error fetching collection types with counts:', error);
-    
-    // Fallback to predefined types with zero counts
-    const defaultTypes: CollectionType[] = [
-      'seasonal',
-      'themed',
-      'editorial',
-      'trending',
-      'featured',
-      'new_arrivals',
-      'best_sellers',
-      'limited_time',
-    ];
-
-    return defaultTypes.map(type => ({ type, count: 0 }));
+    logger.error('Failed to fetch collection types with counts:', { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+    return [];
   }
 }
 
 /**
- * Get trending collections (based on recent updates and product count)
+ * Get trending collections based on view count and product count
  * @param limit Maximum number of collections to return
  */
 export async function getTrendingCollections(limit: number = 8): Promise<Collection[]> {
+  const cacheKey = `trending_collections_${limit}`;
+  const cached = getFromCache<Collection[]>(cacheKey);
+  if (cached) return cached;
+
   try {
-    const { data, error } = await supabase
-      .from('collections')
-      .select('*')
-      .eq('is_active', true)
-      .lte('start_date', new Date().toISOString())
-      .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
-      .order('product_count', { ascending: false })
-      .order('updated_at', { ascending: false })
-      .limit(limit);
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('is_active', true)
+        .order('view_count', { ascending: false, nullsFirst: false })
+        .order('product_count', { ascending: false, nullsFirst: false })
+        .order('updated_at', { ascending: false })
+        .limit(limit)
+    );
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Error fetching trending collections:', { 
+        error: error.message, 
+        code: error.code 
+      });
+      return [];
+    }
 
-    return (data || []).map(transformCollection);
+    const collections = (data || []).map(transformCollection);
+    setCache(cacheKey, collections);
+    return collections;
   } catch (error) {
-    console.error('Error fetching trending collections:', error);
+    logger.error('Failed to fetch trending collections:', { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     return [];
   }
 }
@@ -399,24 +688,41 @@ export async function searchCollections(
   query: string,
   limit: number = 10
 ): Promise<Collection[]> {
+  if (!query.trim()) {
+    return [];
+  }
+
+  const cacheKey = `search_collections_${query}_${limit}`;
+  const cached = getFromCache<Collection[]>(cacheKey);
+  if (cached) return cached;
+
   try {
-    if (!query.trim()) {
+    const { data, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*')
+        .eq('is_active', true)
+        .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
+        .order('product_count', { ascending: false, nullsFirst: false })
+        .order('view_count', { ascending: false, nullsFirst: false })
+        .limit(limit)
+    );
+
+    if (error) {
+      logger.error('Error searching collections:', { 
+        error: error.message, 
+        code: error.code 
+      });
       return [];
     }
 
-    const { data, error } = await supabase
-      .from('collections')
-      .select('*')
-      .eq('is_active', true)
-      .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
-      .order('updated_at', { ascending: false })
-      .limit(limit);
-
-    if (error) throw error;
-
-    return (data || []).map(transformCollection);
+    const collections = (data || []).map(transformCollection);
+    setCache(cacheKey, collections);
+    return collections;
   } catch (error) {
-    console.error('Error searching collections:', error);
+    logger.error('Failed to search collections:', { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     return [];
   }
 }
@@ -426,26 +732,40 @@ export async function searchCollections(
  * @param slug Collection slug
  */
 export async function collectionExists(slug: string): Promise<boolean> {
+  const cacheKey = `collection_exists_${slug}`;
+  const cached = getFromCache<boolean>(cacheKey);
+  if (cached !== undefined) return cached;
+
   try {
-    const { count, error } = await supabase
-      .from('collections')
-      .select('*', { count: 'exact', head: true })
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .lte('start_date', new Date().toISOString())
-      .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`);
+    const { count, error } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('*', { count: 'exact', head: true })
+        .eq('slug', slug)
+        .eq('is_active', true)
+    );
 
-    if (error) throw error;
+    if (error) {
+      logger.error(`Error checking if collection exists "${slug}":`, { 
+        error: error.message, 
+        code: error.code 
+      });
+      return false;
+    }
 
-    return (count || 0) > 0;
+    const exists = (count || 0) > 0;
+    setCache(cacheKey, exists);
+    return exists;
   } catch (error) {
-    console.error(`Error checking if collection exists "${slug}":`, error);
+    logger.error(`Failed to check if collection exists "${slug}":`, { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     return false;
   }
 }
 
 /**
- * Get similar collections (same type or overlapping products)
+ * Get similar collections (same type or category)
  * @param collectionId Current collection ID
  * @param limit Maximum number of similar collections to return
  */
@@ -453,58 +773,74 @@ export async function getSimilarCollections(
   collectionId: string,
   limit: number = 4
 ): Promise<Collection[]> {
+  const cacheKey = `similar_collections_${collectionId}_${limit}`;
+  const cached = getFromCache<Collection[]>(cacheKey);
+  if (cached) return cached;
+
   try {
     // First, get the current collection
-    const { data: currentCollection, error: collectionError } = await supabase
-      .from('collections')
-      .select('type')
-      .eq('id', collectionId)
-      .single();
+    const { data: currentCollection, error: collectionError } = await fetchWithTimeout(
+      supabase
+        .from('collections')
+        .select('type, category_id')
+        .eq('id', collectionId)
+        .single()
+    );
 
-    if (collectionError) {
+    if (collectionError || !currentCollection) {
+      logger.error(`Error fetching current collection "${collectionId}":`, { 
+        error: collectionError?.message, 
+        code: collectionError?.code 
+      });
       return [];
     }
 
-    // Find collections with the same type, excluding the current one
-    const { data, error } = await supabase
+    // Build query for similar collections
+    let query = supabase
       .from('collections')
       .select('*')
-      .eq('type', currentCollection.type)
       .neq('id', collectionId)
-      .eq('is_active', true)
-      .lte('start_date', new Date().toISOString())
-      .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
-      .order('product_count', { ascending: false })
-      .order('updated_at', { ascending: false })
-      .limit(limit);
+      .eq('is_active', true);
 
-    if (error) throw error;
-
-    // If we don't have enough same-type collections, fill with trending ones
-    if ((data?.length || 0) < limit) {
-      const remaining = limit - (data?.length || 0);
-      const { data: trendingData } = await supabase
-        .from('collections')
-        .select('*')
-        .neq('id', collectionId)
-        .neq('type', currentCollection.type)
-        .eq('is_active', true)
-        .lte('start_date', new Date().toISOString())
-        .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
-        .order('product_count', { ascending: false })
-        .limit(remaining);
-
-      const allCollections = [
-        ...(data || []),
-        ...(trendingData || []),
-      ].slice(0, limit);
-
-      return allCollections.map(transformCollection);
+    // Prioritize same type, then same category
+    if (currentCollection.type) {
+      query = query.or(`type.eq.${currentCollection.type},category_id.eq.${currentCollection.category_id || ''}`);
+    } else if (currentCollection.category_id) {
+      query = query.eq('category_id', currentCollection.category_id);
     }
 
-    return (data || []).map(transformCollection);
+    // Sort by relevance
+    const { data, error } = await fetchWithTimeout(
+      query
+        .order('product_count', { ascending: false, nullsFirst: false })
+        .order('view_count', { ascending: false, nullsFirst: false })
+        .order('updated_at', { ascending: false })
+        .limit(limit)
+    );
+
+    if (error) {
+      logger.error(`Error fetching similar collections for "${collectionId}":`, { 
+        error: error.message, 
+        code: error.code 
+      });
+      return [];
+    }
+
+    const collections = (data || []).map(transformCollection);
+    setCache(cacheKey, collections);
+    return collections;
   } catch (error) {
-    console.error(`Error fetching similar collections for "${collectionId}":`, error);
+    logger.error(`Failed to fetch similar collections for "${collectionId}":`, { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     return [];
   }
+}
+
+/**
+ * Clear all caches (useful for admin actions)
+ */
+export function clearCollectionsCache(): void {
+  clearCache();
+  logger.info('Collections cache cleared');
 }

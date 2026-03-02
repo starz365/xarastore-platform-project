@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useCart } from '@/lib/hooks/useCart';
-import { formatCurrency } from '@/lib/utils/currency';
+import { useCurrency } from '@/components/settings/CurrencyProvider';
 import { Button } from '@/components/ui/Button';
 import { CartItem } from './CartItem';
 import { CartEmptyState } from './CartEmptyState';
@@ -18,6 +18,7 @@ interface CartFlyoutProps {
 export function CartFlyout({ isOpen, onClose }: CartFlyoutProps) {
   const router = useRouter();
   const { items, getTotal, getItemCount } = useCart();
+  const { format, isLoading: currencyLoading } = useCurrency();
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -47,12 +48,16 @@ export function CartFlyout({ isOpen, onClose }: CartFlyoutProps) {
 
   if (!isOpen) return null;
 
+  const itemCount = getItemCount();
+  const subtotal = getTotal();
+
   return (
     <>
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 z-40 transition-opacity"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Cart Panel */}
@@ -63,7 +68,7 @@ export function CartFlyout({ isOpen, onClose }: CartFlyoutProps) {
             <ShoppingBag className="w-6 h-6 text-red-600" />
             <h2 className="text-xl font-bold text-gray-900">Your Cart</h2>
             <span className="px-2 py-1 bg-red-100 text-red-600 text-sm font-medium rounded-full">
-              {getItemCount()} items
+              {itemCount} {itemCount === 1 ? 'item' : 'items'}
             </span>
           </div>
           <button
@@ -100,13 +105,17 @@ export function CartFlyout({ isOpen, onClose }: CartFlyoutProps) {
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Subtotal</span>
               <span className="text-xl font-bold text-gray-900">
-                {formatCurrency(getTotal())}
+                {currencyLoading ? (
+                  <span className="animate-pulse bg-gray-200 rounded w-20 h-6 inline-block" />
+                ) : (
+                  format(subtotal)
+                )}
               </span>
             </div>
 
-            <div className="text-sm text-gray-600 text-center">
+            <p className="text-sm text-gray-600 text-center">
               Shipping & taxes calculated at checkout
-            </div>
+            </p>
 
             <div className="space-y-3">
               <Button
@@ -130,8 +139,12 @@ export function CartFlyout({ isOpen, onClose }: CartFlyoutProps) {
             </div>
 
             <div className="flex items-center justify-center space-x-4 text-sm text-gray-600">
-              <span>✓ Secure checkout</span>
-              <span>✓ Free returns</span>
+              <span className="flex items-center">
+                <span className="mr-1">✓</span> Secure checkout
+              </span>
+              <span className="flex items-center">
+                <span className="mr-1">✓</span> Free returns
+              </span>
             </div>
           </div>
         )}

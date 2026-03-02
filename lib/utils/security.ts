@@ -315,3 +315,32 @@ export class SecurityService {
 }
 
 export const security = SecurityService.getInstance();
+
+export async function validateApiKey(apiKey: string, role: string = 'admin'): Promise<boolean> {
+  if (!apiKey) {
+    return false;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('api_keys')
+      .select('id, key_hash, role, is_active, expires_at')
+      .eq('key_hash', apiKey)
+      .eq('role', role)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !data) {
+      return false;
+    }
+
+    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('API key validation error:', error);
+    return false;
+  }
+}

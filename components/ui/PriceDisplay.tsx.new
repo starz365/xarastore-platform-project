@@ -1,0 +1,142 @@
+'use client';
+
+import { memo } from 'react';
+import { cn } from '@/lib/utils/cn';
+import { formatCurrency, formatPrice, calculateDiscountPercentage } from '@/lib/utils/currency';
+
+interface PriceDisplayProps {
+  price: number;
+  originalPrice?: number | null;
+  currency?: string;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+  className?: string;
+  showDiscount?: boolean;
+  showCurrency?: boolean;
+  isOutOfStock?: boolean;
+}
+
+export const PriceDisplay = memo(function PriceDisplay({
+  price,
+  originalPrice,
+  currency = 'KES',
+  size = 'md',
+  className = '',
+  showDiscount = true,
+  showCurrency = true,
+  isOutOfStock = false,
+}: PriceDisplayProps) {
+  // Defensive validation - ensure we have valid numbers
+  const validPrice = typeof price === 'number' && !isNaN(price) && isFinite(price) 
+    ? Math.max(0, price) 
+    : 0;
+  
+  const validOriginalPrice = typeof originalPrice === 'number' && !isNaN(originalPrice) && isFinite(originalPrice)
+    ? Math.max(0, originalPrice)
+    : null;
+
+  // Calculate if there's a valid discount
+  const hasDiscount = validOriginalPrice !== null && validOriginalPrice > validPrice && validPrice > 0;
+  const discountPercentage = hasDiscount 
+    ? calculateDiscountPercentage(validOriginalPrice!, validPrice)
+    : 0;
+
+  // Size mappings for responsive design
+  const sizeClasses = {
+    sm: {
+      container: 'text-sm',
+      price: 'text-base',
+      original: 'text-xs',
+      discount: 'text-xs',
+    },
+    md: {
+      container: 'text-base',
+      price: 'text-lg',
+      original: 'text-sm',
+      discount: 'text-xs',
+    },
+    lg: {
+      container: 'text-lg',
+      price: 'text-xl',
+      original: 'text-base',
+      discount: 'text-sm',
+    },
+    xl: {
+      container: 'text-xl',
+      price: 'text-2xl',
+      original: 'text-lg',
+      discount: 'text-base',
+    },
+  };
+
+  // Format price with proper currency
+  const formattedPrice = showCurrency 
+    ? formatCurrency(validPrice)
+    : formatPrice(validPrice);
+
+  const formattedOriginalPrice = validOriginalPrice && showCurrency
+    ? formatCurrency(validOriginalPrice)
+    : validOriginalPrice ? formatPrice(validOriginalPrice) : '';
+
+  return (
+    <div 
+      className={cn(
+        'flex items-center flex-wrap gap-2',
+        sizeClasses[size].container,
+        isOutOfStock && 'opacity-60',
+        className
+      )}
+      aria-label={`Price: ${formattedPrice}${hasDiscount ? `, was ${formattedOriginalPrice}` : ''}`}
+    >
+      {/* Current Price */}
+      <span 
+        className={cn(
+          'font-bold text-gray-900',
+          sizeClasses[size].price,
+          isOutOfStock && 'text-gray-600'
+        )}
+      >
+        {formattedPrice}
+      </span>
+
+      {/* Original Price (if discounted) */}
+      {hasDiscount && validOriginalPrice && (
+        <>
+          <span 
+            className={cn(
+              'text-gray-400 line-through',
+              sizeClasses[size].original
+            )}
+            aria-label={`Original price: ${formattedOriginalPrice}`}
+          >
+            {formattedOriginalPrice}
+          </span>
+          
+          {/* Discount Badge */}
+          {showDiscount && discountPercentage > 0 && (
+            <span 
+              className={cn(
+                'inline-flex items-center px-2 py-0.5 bg-red-100 text-red-700 font-medium rounded',
+                sizeClasses[size].discount
+              )}
+              aria-label={`${discountPercentage}% discount`}
+            >
+              -{discountPercentage}%
+            </span>
+          )}
+        </>
+      )}
+
+      {/* Show special message for zero price (e.g., out of stock but price display needed) */}
+      {validPrice === 0 && !hasDiscount && (
+        <span className="text-sm text-gray-500">Contact for price</span>
+      )}
+
+      {/* Price upon request indicator */}
+      {validPrice === 0 && hasDiscount && (
+        <span className="text-sm text-gray-500">Price upon request</span>
+      )}
+    </div>
+  );
+});
+
+PriceDisplay.displayName = 'PriceDisplay';

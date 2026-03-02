@@ -1,9 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Search, ShoppingCart, User, Heart, Menu, X, Package } from 'lucide-react';
+import {
+  Search,
+  ShoppingCart,
+  User,
+  Heart,
+  Menu,
+  X,
+  Package,
+} from 'lucide-react';
 import { useCart } from '@/lib/hooks/useCart';
 import { SearchBar } from '@/components/search/SearchBar';
 import { CartFlyout } from '@/components/cart/CartFlyout';
@@ -15,15 +23,44 @@ export function Header() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
   const pathname = usePathname();
   const { getItemCount } = useCart();
 
+  // --------------------------
+  // Prevent Hydration Mismatch
+  // --------------------------
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // --------------------------
+  // Scroll State Optimization
+  // --------------------------
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 10);
     };
-    window.addEventListener('scroll', handleScroll);
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // --------------------------
+  // Stable Cart Count
+  // --------------------------
+  const itemCount = useMemo(() => {
+    if (!mounted) return 0;
+    return getItemCount();
+  }, [mounted, getItemCount]);
+
+  const openCart = useCallback(() => {
+    setIsCartOpen(true);
+  }, []);
+
+  const closeCart = useCallback(() => {
+    setIsCartOpen(false);
   }, []);
 
   return (
@@ -37,7 +74,7 @@ export function Header() {
       >
         <div className="container-responsive">
           <div className="flex items-center justify-between">
-            {/* Logo */}
+            {/* LEFT SECTION */}
             <div className="flex items-center space-x-8">
               <button
                 className="lg:hidden"
@@ -57,10 +94,13 @@ export function Header() {
                     <span className="text-white font-bold text-lg">X</span>
                   </div>
                   <div className="ml-2">
-                    <h1 className="text-xl font-bold text-gray-900">Xarastore</h1>
+                    <h1 className="text-xl font-bold text-gray-900">
+                      Xarastore
+                    </h1>
                     <p className="text-xs text-gray-500">it's a deal</p>
                   </div>
                 </div>
+
                 <div className="lg:hidden">
                   <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
                     <span className="text-white font-bold text-lg">X</span>
@@ -73,65 +113,68 @@ export function Header() {
                 <Link
                   href="/shop"
                   className={`font-medium transition-colors hover:text-red-600 ${
-                    pathname === '/shop' ? 'text-red-600' : 'text-gray-700'
+                    pathname === '/shop'
+                      ? 'text-red-600'
+                      : 'text-gray-700'
                   }`}
                 >
                   Shop
                 </Link>
+
                 <Link
                   href="/deals"
                   className={`font-medium transition-colors hover:text-red-600 ${
-                    pathname === '/deals' ? 'text-red-600' : 'text-gray-700'
+                    pathname === '/deals'
+                      ? 'text-red-600'
+                      : 'text-gray-700'
                   }`}
                 >
                   Deals
                 </Link>
+
                 <MegaMenu />
+
                 <Link
                   href="/brands"
                   className={`font-medium transition-colors hover:text-red-600 ${
-                    pathname.startsWith('/brands') ? 'text-red-600' : 'text-gray-700'
+                    pathname.startsWith('/brands')
+                      ? 'text-red-600'
+                      : 'text-gray-700'
                   }`}
                 >
                   Brands
                 </Link>
-		<Link
+
+                <Link
                   href="/category"
                   className={`font-medium transition-colors hover:text-brand-red ${
-                    pathname.startsWith('/category') ? 'text-brand-red' : 'text-gray-700'
+                    pathname.startsWith('/category')
+                      ? 'text-brand-red'
+                      : 'text-gray-700'
                   }`}
                 >
                   Categories
                 </Link>
-		<Link
+
+                <Link
                   href="/collections"
                   className={`font-medium transition-colors hover:text-brand-red ${
-                    pathname.startsWith('/collections') ? 'text-brand-red' : 'text-gray-700'
+                    pathname.startsWith('/collections')
+                      ? 'text-brand-red'
+                      : 'text-gray-700'
                   }`}
                 >
                   Collections
-                </Link>		
-
-		{/*
-                <Link
-                  href="/track-order"
-                  className={`font-medium transition-colors hover:text-red-600 ${
-                    pathname === '/track-order' ? 'text-red-600' : 'text-gray-700'
-                  }`}
-                >
-                  Track Order
                 </Link>
-		*/}
-
               </nav>
             </div>
 
-            {/* Search - Desktop */}
+            {/* Desktop Search */}
             <div className="hidden lg:block flex-1 max-w-2xl mx-8">
               <SearchBar />
             </div>
 
-            {/* Actions */}
+            {/* RIGHT SECTION */}
             <div className="flex items-center space-x-4">
               <button
                 className="lg:hidden"
@@ -144,40 +187,48 @@ export function Header() {
               <Link
                 href="/trackorder"
                 className="hidden md:flex items-center space-x-1 text-gray-700 hover:text-red-600 transition-colors"
-                aria-label="Track"
               >
                 <Package className="w-5 h-5" />
-                <span className="text-sm font-medium hidden lg:inline">Track</span>
+                <span className="text-sm font-medium hidden lg:inline">
+                  Track
+                </span>
               </Link>
 
               <Link
                 href="/account/wishlist"
                 className="hidden sm:flex items-center space-x-1 text-gray-700 hover:text-red-600 transition-colors"
-                aria-label="Wishlist"
               >
                 <Heart className="w-5 h-5" />
-                <span className="text-sm font-medium hidden md:inline">Wishlist</span>
+                <span className="text-sm font-medium hidden md:inline">
+                  Wishlist
+                </span>
               </Link>
 
               <Link
                 href="/account"
                 className="hidden sm:flex items-center space-x-1 text-gray-700 hover:text-red-600 transition-colors"
-                aria-label="Account"
               >
                 <User className="w-5 h-5" />
-                <span className="text-sm font-medium hidden md:inline">Account</span>
+                <span className="text-sm font-medium hidden md:inline">
+                  Account
+                </span>
               </Link>
 
+              {/* Cart Button */}
               <button
-                onClick={() => setIsCartOpen(true)}
+                onClick={openCart}
                 className="relative flex items-center space-x-1 text-gray-700 hover:text-red-600 transition-colors"
                 aria-label="Cart"
               >
                 <ShoppingCart className="w-5 h-5" />
-                <span className="text-sm font-medium">{getItemCount()}</span>
-                {getItemCount() > 0 && (
+
+                <span className="text-sm font-medium">
+                  {itemCount}
+                </span>
+
+                {itemCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 text-white text-xs rounded-full flex items-center justify-center">
-                    {getItemCount()}
+                    {itemCount}
                   </span>
                 )}
               </button>
@@ -200,7 +251,7 @@ export function Header() {
       />
 
       {/* Cart Flyout */}
-      <CartFlyout isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      <CartFlyout isOpen={isCartOpen} onClose={closeCart} />
     </>
   );
 }

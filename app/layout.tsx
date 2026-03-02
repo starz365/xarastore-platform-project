@@ -25,15 +25,33 @@ export const inter = localFont({
   display: 'swap',
 });
 
+// Default settings to use when fetch fails
+const DEFAULT_SITE_NAME = 'Xarastore';
+const DEFAULT_SITE_TAGLINE = "it's a deal";
+const DEFAULT_PRIMARY_COLOR = '#dc2626';
+
 // ----------------------
 // Dynamic Metadata with Settings Manager
 // ----------------------
 export async function generateMetadata(): Promise<Metadata> {
-  const settings = await settingsManager.getSiteSettings();
+  let settings;
+  try {
+    settings = await settingsManager.getSiteSettings();
+  } catch (error) {
+    // If all fetch attempts fail, use default values
+    settings = {
+      site_name: DEFAULT_SITE_NAME,
+      site_tagline: DEFAULT_SITE_TAGLINE,
+      seo_title: '',
+      seo_description: '',
+      seo_keywords: '',
+      logo_url: '',
+    };
+  }
+  
   const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://xarastore.com';
   
   return {
-    // FIXED: Added metadataBase to resolve social image warnings
     metadataBase: new URL(siteUrl),
     
     title: {
@@ -45,9 +63,9 @@ export async function generateMetadata(): Promise<Metadata> {
     
     keywords: settings.seo_keywords || 'online shopping, Kenya, deals, electronics, fashion, home goods',
     
-    authors: [{ name: settings.site_name || 'Xarastore' }],
-    creator: settings.site_name || 'Xarastore',
-    publisher: settings.site_name || 'Xarastore',
+    authors: [{ name: settings.site_name || DEFAULT_SITE_NAME }],
+    creator: settings.site_name || DEFAULT_SITE_NAME,
+    publisher: settings.site_name || DEFAULT_SITE_NAME,
     
     openGraph: {
       type: 'website',
@@ -68,7 +86,7 @@ export async function generateMetadata(): Promise<Metadata> {
           url: '/og-image.png',
           width: 1200,
           height: 630,
-          alt: settings.site_name || 'Xarastore',
+          alt: settings.site_name || DEFAULT_SITE_NAME,
         },
       ],
     },
@@ -78,7 +96,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: settings.seo_title || settings.site_name,
       description: settings.seo_description || settings.site_tagline,
       images: settings.logo_url ? [settings.logo_url] : ['/twitter-image.png'],
-      creator: '@xarastore', // Update with your actual Twitter handle if different
+      creator: '@xarastore',
     },
     
     robots: {
@@ -97,17 +115,15 @@ export async function generateMetadata(): Promise<Metadata> {
       google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
     },
     
-    // Additional metadata for better SEO
     alternates: {
       canonical: siteUrl,
     },
     
-    // App-specific metadata
-    applicationName: settings.site_name || 'Xarastore',
+    applicationName: settings.site_name || DEFAULT_SITE_NAME,
     appleWebApp: {
       capable: true,
       statusBarStyle: 'black-translucent',
-      title: settings.site_name || 'Xarastore',
+      title: settings.site_name || DEFAULT_SITE_NAME,
     },
     
     formatDetection: {
@@ -122,10 +138,17 @@ export async function generateMetadata(): Promise<Metadata> {
 // Dynamic Viewport with Settings Manager
 // ----------------------
 export async function generateViewport(): Promise<Viewport> {
-  const settings = await settingsManager.getSiteSettings();
+  let primaryColor = DEFAULT_PRIMARY_COLOR;
+  
+  try {
+    const settings = await settingsManager.getSiteSettings();
+    primaryColor = settings.primary_color || DEFAULT_PRIMARY_COLOR;
+  } catch (error) {
+    // Use default color if fetch fails
+  }
   
   return {
-    themeColor: settings.primary_color || '#dc2626',
+    themeColor: primaryColor,
     width: 'device-width',
     initialScale: 1,
     maximumScale: 5,
