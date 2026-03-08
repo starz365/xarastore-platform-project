@@ -1,0 +1,223 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { supabase } from '@/lib/supabase/client'
+import { toast } from '@/components/shared/Toast'
+
+const MAX_REG_ATTEMPTS = 4
+const WINDOW = 60000
+
+export default function RegisterPage() {
+
+  const router = useRouter()
+
+  const [form,setForm] = useState({
+    name:'',
+    email:'',
+    password:'',
+    confirm:''
+  })
+
+  const [loading,setLoading] = useState(false)
+  const [showPass,setShowPass] = useState(false)
+  const [attempts,setAttempts] = useState(0)
+  const [start,setStart] = useState<number | null>(null)
+
+  const rateLimit = () => {
+    const now = Date.now()
+
+    if(!start || now-start > WINDOW){
+      setStart(now)
+      setAttempts(1)
+      return true
+    }
+
+    if(attempts >= MAX_REG_ATTEMPTS){
+      toast.error('Too many registrations attempted')
+      return false
+    }
+
+    setAttempts(a=>a+1)
+    return true
+  }
+
+  const submit = async(e:React.FormEvent)=>{
+    e.preventDefault()
+
+    if(!rateLimit()) return
+
+    if(form.password !== form.confirm){
+      toast.warning('Passwords do not match')
+      return
+    }
+
+    setLoading(true)
+
+    try{
+
+      // duplicate email check
+      const { data:existing } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email',form.email.trim())
+        .maybeSingle()
+
+      if(existing){
+        toast.error('Account already exists', {
+          description:'Try logging in instead.'
+        })
+        router.push('/auth/login')
+        return
+      }
+
+      const { data, error } = await supabase.auth.signUp({
+        email:form.email.trim(),
+        password:form.password,
+        options:{
+          data:{ full_name:form.name },
+          emailRedirectTo:`${window.location.origin}/auth/callback`
+        }
+      })
+
+      if(error) throw error
+
+      if(data.user){
+
+        await supabase.from('users').insert({
+          id:data.user.id,
+          email:data.user.email,
+          full_name:form.name
+        })
+
+        toast.success('Account created!',{
+          description:'Verify your email to continue.'
+        })
+
+        toast.info('Check your inbox for the verification link.')
+
+        router.push('/auth/login')
+      }
+
+    }catch(err:any){
+
+      const msg = err?.message || ''
+
+      if(msg.includes('already registered')){
+        toast.error('Email already registered',{
+          description:'Please log in instead.'
+        })
+      }
+
+      else if(msg.includes('weak')){
+        toast.warning('Password too weak')
+      }
+
+      else{
+        toast.error('Registration failed',{
+          description:msg
+        })
+      }
+
+    }
+
+    setLoading(false)
+  }
+
+  return(
+
+<div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
+
+<div className="max-w-md w-full space-y-6">
+
+<div className="text-center">
+<h1 className="text-3xl font-bold">Create Account</h1>
+<p className="text-gray-500">Join Xarastore today</p>
+</div>
+
+<form onSubmit={submit} className="space-y-4">
+
+<div>
+<label>Full Name</label>
+<div className="relative">
+<User className="absolute left-3 top-3 w-4 h-4 text-gray-400"/>
+<Input
+className="pl-10"
+value={form.name}
+onChange={e=>setForm({...form,name:e.target.value})}
+/>
+</div>
+</div>
+
+<div>
+<label>Email</label>
+<div className="relative">
+<Mail className="absolute left-3 top-3 w-4 h-4 text-gray-400"/>
+<Input
+type="email"
+className="pl-10"
+value={form.email}
+onChange={e=>setForm({...form,email:e.target.value})}
+/>
+</div>
+</div>
+
+<div>
+<label>Password</label>
+
+<div className="relative">
+
+<Lock className="absolute left-3 top-3 w-4 h-4 text-gray-400"/>
+
+<Input
+type={showPass ? 'text':'password'}
+className="pl-10 pr-10"
+value={form.password}
+onChange={e=>setForm({...form,password:e.target.value})}
+/>
+
+<button
+type="button"
+onClick={()=>setShowPass(!showPass)}
+className="absolute right-3 top-3"
+>
+{showPass ? <EyeOff size={18}/> : <Eye size={18}/>}
+</button>
+
+</div>
+
+</div>
+
+<div>
+<label>Confirm Password</label>
+
+<Input
+type="password"
+value={form.confirm}
+onChange={e=>setForm({...form,confirm:e.target.value})}
+/>
+
+</div>
+
+<Button className="w-full" disabled={loading}>
+{loading ? 'Creating account...' : 'Create Account'}
+</Button>
+
+</form>
+
+<div className="text-center text-sm text-gray-500">
+Already have an account?{' '}
+<Link href="/auth/login" className="text-red-600 font-medium">
+Sign in
+</Link>
+</div>
+
+</div>
+</div>
+
+  )
+}

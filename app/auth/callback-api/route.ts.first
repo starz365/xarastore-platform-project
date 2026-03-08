@@ -1,0 +1,103 @@
+import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
+
+const DEFAULT_REDIRECT = '/'
+
+export async function GET(request: Request) {
+  const url = new URL(request.url)
+  const code = url.searchParams.get('code')
+  const next = url.searchParams.get('next') ?? DEFAULT_REDIRECT
+  const origin = url.origin
+
+  const cookieStore = cookies()
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options)
+          })
+        },
+      },
+    }
+  )
+
+  try {
+    if (!code) {
+      return NextResponse.redirect(`${origin}/auth/login?error=missing_code`)
+    }
+
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+    if (error) {
+      console.error('Auth exchange error:', error.message)
+
+      return NextResponse.redirect(
+        `${origin}/auth/login?error=auth_exchange_failed`
+      )
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.redirect(`${origin}/auth/login?error=user_not_found`)
+    }
+
+    /*
+    ===========================
+    ENSURE USER PROFILE EXISTS
+    ===========================
+    */
+
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (!existingUser) {
+      await supabase.from('users').insert({
+        id: user.id,
+        email: user.email,
+        full_name:
+          user.user_metadata?.full_name ||
+          user.email?.split('@')[0] ||
+          'User',
+        avatar_url:
+          user.user_metadata?.avatar_url ||
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            user.email || 'User'
+          )}&background=dc2626&color=fff`,
+        email_verified: !!user.email_confirmed_at,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+    }
+
+    /*
+    ===========================
+    SUCCESS REDIRECT
+    ===========================
+    */
+
+    const safeRedirect =
+      next.startsWith('/') && !next.startsWith('//')
+        ? next
+        : DEFAULT_REDIRECT
+
+    return NextResponse.redirect(`${origin}${safeRedirect}`)
+  } catch (error) {
+    console.error('Callback fatal error:', error)
+
+    return NextResponse.redirect(`${origin}/auth/login?error=server_error`)
+  }
+}

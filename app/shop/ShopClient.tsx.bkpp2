@@ -1,0 +1,872 @@
+'use client';
+
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { 
+  LayoutGrid, 
+  LayoutList, 
+  SlidersHorizontal, 
+  X,
+  ChevronDown,
+  Eye,
+  Clock,
+  TrendingUp,
+  Sparkles,
+  ShoppingBag,
+  RefreshCw
+} from 'lucide-react';
+import { Product } from '@/types';
+import { ProductCard } from '@/components/product/ProductCard';
+import { ProductListItem } from '@/components/product/ProductListItem';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { Button } from '@/components/ui/Button';
+import { Pagination, PaginationInfo, PaginationWithSize } from '@/components/ui/Pagination';
+import { useDebounce } from '@/lib/hooks/useDebounce';
+import { useLocalStorage } from '@/lib/hooks/useLocalStorage';
+import { useNetworkStatus } from '@/lib/hooks/useNetworkStatus';
+import { cn } from '@/lib/utils/css';
+import { analytics } from '@/services/analytics/tracker';
+import { supabase } from '@/lib/supabase/client';
+
+interface ShopClientProps {
+  initialProducts: Product[];
+  initialTotal: number;
+  initialFilters: Record<string, any>;
+  categories: Array<{ id: string; name: string; slug: string }>;
+  brands: Array<{ id: string; name: string; slug: string }>;
+}
+
+type ViewMode = 'grid' | 'list';
+type SortOption = 'newest' | 'price-low' | 'price-high' | 'rating' | 'popularity';
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest First', icon: Clock },
+  { value: 'popularity', label: 'Most Popular', icon: TrendingUp },
+  { value: 'rating', label: 'Highest Rated', icon: Sparkles },
+  { value: 'price-low', label: 'Price: Low to High', icon: ChevronDown },
+  { value: 'price-high', label: 'Price: High to Low', icon: ChevronDown },
+];
+
+const PAGE_SIZE_OPTIONS = [12, 24, 36, 48, 72];
+
+export function ShopClient({
+  initialProducts,
+  initialTotal,
+  initialFilters,
+  categories,
+  brands,
+}: ShopClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { isOnline } = useNetworkStatus();
+
+  // State
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [totalProducts, setTotalProducts] = useState(initialTotal);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [activeFilters, setActiveFilters] = useState(initialFilters);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000000]);
+  const [maxPrice, setMaxPrice] = useState(1000000);
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [onSaleOnly, setOnSaleOnly] = useState(false);
+  const [realTimeStock, setRealTimeStock] = useState<Record<string, number>>({});
+
+  // View preferences (persisted)
+  const [viewMode, setViewMode] = useLocalStorage<ViewMode>('shop-view-mode', 'grid');
+  const [sortBy, setSortBy] = useLocalStorage<SortOption>('shop-sort', 'newest');
+  const [pageSize, setPageSize] = useLocalStorage('shop-page-size', 24);
+
+  // Pagination from URL or defaults
+  const [currentPage, setCurrentPage] = useState(() => {
+    const page = searchParams.get('page');
+    return page ? parseInt(page) : 1;
+  });
+
+  const debouncedSearch = useDebounce(searchQuery, 500);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const cacheRef = useRef<Map<string, { products: Product[]; total: number }>>(new Map());
+
+  // Calculate price range from products
+  useEffect(() => {
+    if (products.length > 0) {
+      const prices = products.map(p => p.price);
+      const max = Math.max(...prices, 1000);
+      setMaxPrice(max);
+    }
+  }, [products]);
+
+  // Parse URL filters on mount
+  useEffect(() => {
+    const category = searchParams.get('category');
+    const brand = searchParams.get('brand');
+    const minPrice = searchParams.get('minPrice');
+    const maxPrice = searchParams.get('maxPrice');
+    const sort = searchParams.get('sort') as SortOption;
+    const inStock = searchParams.get('inStock');
+    const onSale = searchParams.get('onSale');
+
+    if (category) setSelectedCategories([category]);
+    if (brand) setSelectedBrands([brand]);
+    if (minPrice && maxPrice) setPriceRange([parseInt(minPrice), parseInt(maxPrice)]);
+    if (sort && SORT_OPTIONS.some(o => o.value === sort)) setSortBy(sort);
+    if (inStock === 'true') setInStockOnly(true);
+    if (onSale === 'true') setOnSaleOnly(true);
+  }, [searchParams, setSortBy]);
+
+  // Set up real-time stock updates
+  useEffect(() => {
+    if (!isOnline) return;
+
+    const productIds = products.map(p => p.id);
+    if (productIds.length === 0) return;
+
+    // Subscribe to real-time stock changes
+    const channel = supabase
+      .channel('stock-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'products',
+          filter: `id=in.(${productIds.join(',')})`,
+        },
+        (payload) => {
+          const newStock = payload.new as { id: string; stock: number };
+          setRealTimeStock(prev => ({
+            ...prev,
+            [newStock.id]: newStock.stock,
+          }));
+
+          // Update products array with new stock
+          setProducts(prevProducts => 
+            prevProducts.map(p => 
+              p.id === newStock.id 
+                ? { ...p, stock: newStock.stock }
+                : p
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [products, isOnline]);
+
+  // Build cache key
+  const getCacheKey = useCallback(() => {
+    const params = new URLSearchParams({
+      page: currentPage.toString(),
+      pageSize: pageSize.toString(),
+      sort: sortBy,
+      q: debouncedSearch,
+      categories: selectedCategories.join(','),
+      brands: selectedBrands.join(','),
+      minPrice: priceRange[0].toString(),
+      maxPrice: priceRange[1].toString(),
+      inStock: inStockOnly.toString(),
+      onSale: onSaleOnly.toString(),
+    });
+    return params.toString();
+  }, [
+    currentPage,
+    pageSize,
+    sortBy,
+    debouncedSearch,
+    selectedCategories,
+    selectedBrands,
+    priceRange,
+    inStockOnly,
+    onSaleOnly,
+  ]);
+
+  // Fetch products with caching
+  const fetchProducts = useCallback(async (page: number, preventCache: boolean = false) => {
+    const cacheKey = getCacheKey();
+    
+    // Check cache first
+    if (!preventCache && cacheRef.current.has(cacheKey)) {
+      const cached = cacheRef.current.get(cacheKey)!;
+      setProducts(cached.products);
+      setTotalProducts(cached.total);
+      return;
+    }
+
+    // Abort previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    abortControllerRef.current = new AbortController();
+
+    setIsLoading(true);
+
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+        sort: sortBy,
+      });
+
+      if (debouncedSearch) params.set('q', debouncedSearch);
+      if (selectedCategories.length) params.set('categories', selectedCategories.join(','));
+      if (selectedBrands.length) params.set('brands', selectedBrands.join(','));
+      if (priceRange[0] > 0) params.set('minPrice', priceRange[0].toString());
+      if (priceRange[1] < maxPrice) params.set('maxPrice', priceRange[1].toString());
+      if (inStockOnly) params.set('inStock', 'true');
+      if (onSaleOnly) params.set('onSale', 'true');
+
+      const response = await fetch(`/api/products/search?${params.toString()}`, {
+        signal: abortControllerRef.current.signal,
+        headers: {
+          'Cache-Control': 'max-age=60',
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch products');
+
+      const data = await response.json();
+
+      // Update cache
+      cacheRef.current.set(cacheKey, {
+        products: data.products,
+        total: data.total,
+      });
+
+      setProducts(data.products);
+      setTotalProducts(data.total);
+
+      // Track page view
+      analytics.trackEvent({
+        category: 'shop',
+        action: 'page_view',
+        label: `page_${page}`,
+        value: page,
+      });
+
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Error fetching products:', error);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [
+    pageSize,
+    sortBy,
+    debouncedSearch,
+    selectedCategories,
+    selectedBrands,
+    priceRange,
+    maxPrice,
+    inStockOnly,
+    onSaleOnly,
+    getCacheKey,
+  ]);
+
+  // Update URL with filters
+  const updateUrl = useCallback((updates: Record<string, any>) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === undefined || value === '' || 
+          (Array.isArray(value) && value.length === 0)) {
+        params.delete(key);
+      } else {
+        params.set(key, value.toString());
+      }
+    });
+
+    // Reset to page 1 when filters change
+    params.set('page', '1');
+    setCurrentPage(1);
+
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
+
+  // Handle page change
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+    updateUrl({ page });
+    fetchProducts(page);
+    
+    // Scroll to top smoothly
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [updateUrl, fetchProducts]);
+
+  // Handle page size change
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size);
+    updateUrl({ pageSize: size, page: 1 });
+  }, [setPageSize, updateUrl]);
+
+  // Handle sort change
+  const handleSortChange = useCallback((sort: SortOption) => {
+    setSortBy(sort);
+    updateUrl({ sort, page: 1 });
+  }, [setSortBy, updateUrl]);
+
+  // Handle search
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    updateUrl({ q: query || null });
+  }, [updateUrl]);
+
+  // Handle category selection
+  const handleCategoryToggle = useCallback((categoryId: string) => {
+    setSelectedCategories(prev => {
+      const newCategories = prev.includes(categoryId)
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId];
+      updateUrl({ categories: newCategories.join(',') || null });
+      return newCategories;
+    });
+  }, [updateUrl]);
+
+  // Handle brand selection
+  const handleBrandToggle = useCallback((brandId: string) => {
+    setSelectedBrands(prev => {
+      const newBrands = prev.includes(brandId)
+        ? prev.filter(id => id !== brandId)
+        : [...prev, brandId];
+      updateUrl({ brands: newBrands.join(',') || null });
+      return newBrands;
+    });
+  }, [updateUrl]);
+
+  // Handle price range change
+  const handlePriceRangeChange = useCallback((min: number, max: number) => {
+    setPriceRange([min, max]);
+    updateUrl({ minPrice: min, maxPrice: max });
+  }, [updateUrl]);
+
+  // Handle stock filter
+  const handleInStockToggle = useCallback(() => {
+    setInStockOnly(prev => {
+      updateUrl({ inStock: !prev ? 'true' : null });
+      return !prev;
+    });
+  }, [updateUrl]);
+
+  // Handle sale filter
+  const handleOnSaleToggle = useCallback(() => {
+    setOnSaleOnly(prev => {
+      updateUrl({ onSale: !prev ? 'true' : null });
+      return !prev;
+    });
+  }, [updateUrl]);
+
+  // Clear all filters
+  const clearFilters = useCallback(() => {
+    setSelectedCategories([]);
+    setSelectedBrands([]);
+    setPriceRange([0, maxPrice]);
+    setInStockOnly(false);
+    setOnSaleOnly(false);
+    setSearchQuery('');
+    
+    updateUrl({
+      categories: null,
+      brands: null,
+      minPrice: null,
+      maxPrice: null,
+      inStock: null,
+      onSale: null,
+      q: null,
+    });
+  }, [maxPrice, updateUrl]);
+
+  // Get active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedCategories.length) count += selectedCategories.length;
+    if (selectedBrands.length) count += selectedBrands.length;
+    if (priceRange[0] > 0 || priceRange[1] < maxPrice) count++;
+    if (inStockOnly) count++;
+    if (onSaleOnly) count++;
+    if (searchQuery) count++;
+    return count;
+  }, [selectedCategories, selectedBrands, priceRange, maxPrice, inStockOnly, onSaleOnly, searchQuery]);
+
+  // Refetch when filters change
+  useEffect(() => {
+    fetchProducts(currentPage, true);
+  }, [currentPage, fetchProducts]);
+
+  // Loading skeleton
+  const renderSkeletons = () => {
+    if (viewMode === 'grid') {
+      return Array.from({ length: pageSize }).map((_, i) => (
+        <div key={`skeleton-${i}`} className="space-y-3">
+          <Skeleton className="aspect-square rounded-lg" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+          <Skeleton className="h-8 w-full" />
+        </div>
+      ));
+    }
+
+    return Array.from({ length: pageSize }).map((_, i) => (
+      <div key={`skeleton-${i}`} className="flex space-x-4">
+        <Skeleton className="w-32 h-32 rounded-lg" />
+        <div className="flex-1 space-y-3">
+          <Skeleton className="h-5 w-1/2" />
+          <Skeleton className="h-4 w-1/3" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-8 w-32" />
+        </div>
+      </div>
+    ));
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="container-responsive py-8">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {searchQuery ? `Search: "${searchQuery}"` : 'Shop All Products'}
+            </h1>
+            <p className="text-gray-600 mt-2">
+              {totalProducts.toLocaleString()} products available
+            </p>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            {/* Sort Dropdown */}
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={(e) => handleSortChange(e.target.value as SortOption)}
+                className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600 focus:border-transparent text-sm"
+                aria-label="Sort products by"
+              >
+                {SORT_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center bg-white border border-gray-300 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={cn(
+                  'p-2 rounded transition-colors',
+                  viewMode === 'grid' 
+                    ? 'bg-red-600 text-white' 
+                    : 'text-gray-500 hover:text-gray-700'
+                )}
+                aria-label="Grid view"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'p-2 rounded transition-colors',
+                  viewMode === 'list' 
+                    ? 'bg-red-600 text-white' 
+                    : 'text-gray-500 hover:text-gray-700'
+                )}
+                aria-label="List view"
+              >
+                <LayoutList className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Mobile Filter Toggle */}
+            <button
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              className="md:hidden relative p-2.5 bg-white border border-gray-300 rounded-lg"
+              aria-label="Toggle filters"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white text-xs rounded-full flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Active Filters */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-6">
+            <span className="text-sm text-gray-600">Active filters:</span>
+            {selectedCategories.map(catId => {
+              const category = categories.find(c => c.id === catId);
+              return category && (
+                <button
+                  key={catId}
+                  onClick={() => handleCategoryToggle(catId)}
+                  className="inline-flex items-center px-3 py-1.5 bg-red-50 text-red-600 text-sm rounded-full hover:bg-red-100 transition-colors"
+                >
+                  {category.name}
+                  <X className="w-3 h-3 ml-1" />
+                </button>
+              );
+            })}
+            {selectedBrands.map(brandId => {
+              const brand = brands.find(b => b.id === brandId);
+              return brand && (
+                <button
+                  key={brandId}
+                  onClick={() => handleBrandToggle(brandId)}
+                  className="inline-flex items-center px-3 py-1.5 bg-red-50 text-red-600 text-sm rounded-full hover:bg-red-100 transition-colors"
+                >
+                  {brand.name}
+                  <X className="w-3 h-3 ml-1" />
+                </button>
+              );
+            })}
+            {(priceRange[0] > 0 || priceRange[1] < maxPrice) && (
+              <button
+                onClick={() => handlePriceRangeChange(0, maxPrice)}
+                className="inline-flex items-center px-3 py-1.5 bg-red-50 text-red-600 text-sm rounded-full hover:bg-red-100 transition-colors"
+              >
+                KES {priceRange[0].toLocaleString()} - KES {priceRange[1].toLocaleString()}
+                <X className="w-3 h-3 ml-1" />
+              </button>
+            )}
+            {inStockOnly && (
+              <button
+                onClick={handleInStockToggle}
+                className="inline-flex items-center px-3 py-1.5 bg-red-50 text-red-600 text-sm rounded-full hover:bg-red-100 transition-colors"
+              >
+                In Stock Only
+                <X className="w-3 h-3 ml-1" />
+              </button>
+            )}
+            {onSaleOnly && (
+              <button
+                onClick={handleOnSaleToggle}
+                className="inline-flex items-flex items-center px-3 py-1.5 bg-red-50 text-red-600 text-sm rounded-full hover:bg-red-100 transition-colors"
+              >
+                On Sale Only
+                <X className="w-3 h-3 ml-1" />
+              </button>
+            )}
+            <button
+              onClick={clearFilters}
+              className="text-sm text-gray-600 hover:text-red-600 transition-colors"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
+        {/* Offline Warning */}
+        {!isOnline && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <RefreshCw className="w-5 h-5 text-yellow-600" />
+              <p className="text-sm text-yellow-800">
+                You're offline. Showing cached products. Stock information may not be up to date.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* Filters - Desktop */}
+          <aside className="hidden md:block w-64 flex-shrink-0">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 sticky top-20">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-semibold text-gray-900">Filters</h2>
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={clearFilters}
+                    className="text-sm text-red-600 hover:text-red-700"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+
+              {/* Search */}
+              <div className="mb-6">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  placeholder="Search products..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600 focus:border-transparent"
+                />
+              </div>
+
+              {/* Categories */}
+              <div className="mb-6">
+                <h3 className="font-medium text-gray-900 mb-3">Categories</h3>
+                <div className="space-y-2">
+                  {categories.map((category) => (
+                    <label key={category.id} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedCategories.includes(category.id)}
+                        onChange={() => handleCategoryToggle(category.id)}
+                        className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-600"
+                      />
+                      <span className="text-sm text-gray-600">{category.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Brands */}
+              <div className="mb-6">
+                <h3 className="font-medium text-gray-900 mb-3">Brands</h3>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {brands.map((brand) => (
+                    <label key={brand.id} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedBrands.includes(brand.id)}
+                        onChange={() => handleBrandToggle(brand.id)}
+                        className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-600"
+                      />
+                      <span className="text-sm text-gray-600">{brand.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Price Range */}
+              <div className="mb-6">
+                <h3 className="font-medium text-gray-900 mb-3">Price Range (KES)</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-gray-500">Min: KES {priceRange[0].toLocaleString()}</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={maxPrice}
+                      value={priceRange[0]}
+                      onChange={(e) => handlePriceRangeChange(parseInt(e.target.value), priceRange[1])}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">Max: KES {priceRange[1].toLocaleString()}</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={maxPrice}
+                      value={priceRange[1]}
+                      onChange={(e) => handlePriceRangeChange(priceRange[0], parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Filters */}
+              <div className="space-y-3">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={inStockOnly}
+                    onChange={handleInStockToggle}
+                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-600"
+                  />
+                  <span className="text-sm text-gray-600">In Stock Only</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={onSaleOnly}
+                    onChange={handleOnSaleToggle}
+                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-600"
+                  />
+                  <span className="text-sm text-gray-600">On Sale Only</span>
+                </label>
+              </div>
+            </div>
+          </aside>
+
+          {/* Mobile Filters */}
+          {isFilterOpen && (
+            <div className="fixed inset-0 z-50 md:hidden">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setIsFilterOpen(false)} />
+              <div className="absolute right-0 top-0 bottom-0 w-80 bg-white shadow-xl overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="font-semibold text-lg">Filters</h2>
+                    <button
+                      onClick={() => setIsFilterOpen(false)}
+                      className="p-2 hover:bg-gray-100 rounded-lg"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  {/* Mobile filter content (same as desktop) */}
+                  <div className="space-y-6">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => handleSearch(e.target.value)}
+                      placeholder="Search products..."
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    />
+                    <div>
+                      <h3 className="font-medium mb-3">Categories</h3>
+                      {categories.map((category) => (
+                        <label key={category.id} className="flex items-center space-x-2 mb-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedCategories.includes(category.id)}
+                            onChange={() => handleCategoryToggle(category.id)}
+                            className="w-4 h-4 text-red-600"
+                          />
+                          <span className="text-sm">{category.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div>
+                      <h3 className="font-medium mb-3">Brands</h3>
+                      {brands.slice(0, 10).map((brand) => (
+                        <label key={brand.id} className="flex items-center space-x-2 mb-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedBrands.includes(brand.id)}
+                            onChange={() => handleBrandToggle(brand.id)}
+                            className="w-4 h-4 text-red-600"
+                          />
+                          <span className="text-sm">{brand.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <Button
+                      variant="primary"
+                      className="w-full"
+                      onClick={() => setIsFilterOpen(false)}
+                    >
+                      Apply Filters
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Main Content */}
+          <div className="flex-1">
+            {/* Results Info */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+              <PaginationInfo
+                currentPage={currentPage}
+                pageSize={pageSize}
+                totalItems={totalProducts}
+                className="text-gray-600"
+              />
+              
+              {totalProducts > 0 && (
+                <div className="flex items-center space-x-4">
+                  <span className="text-sm text-gray-600">
+                    <Eye className="inline w-4 h-4 mr-1" />
+                    {totalProducts} results
+                  </span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => handlePageSizeChange(parseInt(e.target.value))}
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600 focus:border-transparent"
+                    aria-label="Results per page"
+                  >
+                    {PAGE_SIZE_OPTIONS.map(size => (
+                      <option key={size} value={size}>
+                        {size} per page
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Products Grid/List */}
+            {isLoading ? (
+              <div className={viewMode === 'grid' 
+                ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6'
+                : 'space-y-4'
+              }>
+                {renderSkeletons()}
+              </div>
+            ) : products.length > 0 ? (
+              <>
+                <div className={viewMode === 'grid'
+                  ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6'
+                  : 'space-y-4'
+                }>
+                  {products.map((product) => (
+                    viewMode === 'grid' ? (
+                      <ProductCard 
+                        key={product.id} 
+                        product={{
+                          ...product,
+                          stock: realTimeStock[product.id] ?? product.stock,
+                        }}
+                      />
+                    ) : (
+                      <ProductListItem 
+                        key={product.id} 
+                        product={{
+                          ...product,
+                          stock: realTimeStock[product.id] ?? product.stock,
+                        }}
+                      />
+                    )
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                <div className="mt-12">
+                  <Pagination.WithSize
+                    currentPage={currentPage}
+                    totalPages={Math.ceil(totalProducts / pageSize)}
+                    onPageChange={handlePageChange}
+                    pageSize={pageSize}
+                    pageSizeOptions={PAGE_SIZE_OPTIONS}
+                    onPageSizeChange={handlePageSizeChange}
+                    showPrevNext
+                    showFirstLast
+                    siblingCount={1}
+                    boundaryCount={1}
+                    activeClassName="bg-red-600 text-white hover:bg-red-700"
+                    className="justify-center"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+                <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  No products found
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Try adjusting your filters or search query
+                </p>
+                <Button
+                  variant="primary"
+                  onClick={clearFilters}
+                >
+                  Clear all filters
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

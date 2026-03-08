@@ -1,10 +1,12 @@
-xarastore/app/api/analytics/error-log/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { supabase } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/rate-limit';
 import { validateApiKey } from '@/lib/auth/api-keys';
 import { captureException } from '@/lib/monitoring/sentry';
+
+
+const supabase = await createClient();
 
 const ErrorLogSchema = z.object({
   error_id: z.string().min(1, 'Error ID is required'),
@@ -36,16 +38,16 @@ export async function POST(request: NextRequest) {
     // Rate limiting
     const ip = request.ip || request.headers.get('x-forwarded-for') || 'unknown';
     const rateLimitResult = await rateLimit(ip, 'error-log');
-    
+
     if (!rateLimitResult.success) {
       return NextResponse.json(
-        { 
+        {
           error: 'Rate limit exceeded',
           retry_after: rateLimitResult.retryAfter,
           limit: rateLimitResult.limit,
           remaining: rateLimitResult.remaining,
         },
-        { 
+        {
           status: 429,
           headers: {
             'Retry-After': rateLimitResult.retryAfter.toString(),
@@ -60,7 +62,7 @@ export async function POST(request: NextRequest) {
     // Validate API key for external requests
     const apiKey = request.headers.get('x-api-key');
     const isInternalRequest = request.headers.get('x-internal-request') === process.env.INTERNAL_REQUEST_SECRET;
-    
+
     if (!isInternalRequest && apiKey) {
       const isValidKey = await validateApiKey(apiKey, 'error-logging');
       if (!isValidKey) {
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     if (!validation.success) {
       return NextResponse.json(
-        { 
+        {
           error: 'Validation failed',
           details: validation.error.errors.map(err => ({
             path: err.path.join('.'),
@@ -130,10 +132,10 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       console.error('Failed to insert error logs:', insertError);
-      
+
       // Fallback to file logging if database fails
       await logErrorsToFile(errorsToInsert);
-      
+
       // Send to external monitoring (Sentry)
       errorsToInsert.forEach(error => {
         captureException(new Error(error.message), {
@@ -154,7 +156,7 @@ export async function POST(request: NextRequest) {
 
       // Still return success to client, but log our failure
       return NextResponse.json(
-        { 
+        {
           success: true,
           warning: 'Errors logged with fallback mechanisms',
           count: errors.length,
@@ -198,7 +200,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     // Log our own API error
     console.error('Error log API failure:', error);
-    
+
     // Send to external monitoring
     captureException(error, {
       level: 'error',
@@ -236,7 +238,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
     const offset = (page - 1) * limit;
-    
+
     const level = searchParams.get('level');
     const component = searchParams.get('component');
     const environment = searchParams.get('environment') || 'production';
@@ -257,31 +259,31 @@ export async function GET(request: NextRequest) {
     if (level) {
       query = query.eq('level', level);
     }
-    
+
     if (component) {
       query = query.eq('component', component);
     }
-    
+
     if (environment) {
       query = query.eq('environment', environment);
     }
-    
+
     if (startDate) {
       query = query.gte('created_at', startDate);
     }
-    
+
     if (endDate) {
       query = query.lte('created_at', endDate);
     }
-    
+
     if (search) {
       query = query.or(`message.ilike.%${search}%,error_id.ilike.%${search}%,stack_trace.ilike.%${search}%`);
     }
-    
+
     if (userId) {
       query = query.eq('user_id', userId);
     }
-    
+
     if (sessionId) {
       query = query.eq('session_id', sessionId);
     }
@@ -320,7 +322,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Failed to fetch error logs:', error);
-    
+
     return NextResponse.json(
       {
         error: 'Failed to fetch error logs',
@@ -363,7 +365,7 @@ export async function DELETE(request: NextRequest) {
     if (environment) {
       query = query.eq('environment', environment);
     }
-    
+
     if (level) {
       query = query.eq('level', level);
     }
@@ -386,7 +388,7 @@ export async function DELETE(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Failed to delete error logs:', error);
-    
+
     return NextResponse.json(
       {
         error: 'Failed to delete error logs',
@@ -413,7 +415,7 @@ async function logErrorsToFile(errors: any[]) {
 
     // In production, this would write to a log file or external logging service
     console.error('Error log fallback:', JSON.stringify(logEntry));
-    
+
     // Send to external logging service if configured
     if (process.env.LOG_SERVICE_URL) {
       await fetch(process.env.LOG_SERVICE_URL, {
@@ -443,7 +445,7 @@ async function triggerErrorAlerts(errors: any[]) {
     for (const [component, componentErrors] of Object.entries(errorsByComponent)) {
       // Check if we should alert (rate limiting for alerts)
       const shouldAlert = await checkAlertRateLimit(component);
-      
+
       if (shouldAlert) {
         // Send to alerting service (Slack, PagerDuty, Email, etc.)
         await sendAlert({
@@ -475,10 +477,10 @@ async function updateErrorStats(errors: any[]) {
     const stats = errors.reduce((acc, error) => {
       const component = error.component || 'unknown';
       const level = error.level;
-      
+
       if (!acc[component]) acc[component] = {};
       if (!acc[component][level]) acc[component][level] = 0;
-      
+
       acc[component][level]++;
       return acc;
     }, {} as Record<string, Record<string, number>>);
@@ -521,13 +523,13 @@ async function getErrorStats(startDate?: string | null, endDate?: string | null)
     if (startDate) {
       query = query.gte('timestamp', startDate);
     }
-    
+
     if (endDate) {
       query = query.lte('timestamp', endDate);
     }
 
     const { data: stats, error } = await query;
-    
+
     if (error) {
       throw error;
     }
@@ -539,7 +541,7 @@ async function getErrorStats(startDate?: string | null, endDate?: string | null)
       acc[stat.level] += stat.error_count;
       return acc;
     }, {} as Record<string, number>);
-    
+
     const byComponent = (stats || []).reduce((acc, stat) => {
       if (!acc[stat.component]) acc[stat.component] = 0;
       acc[stat.component] += stat.error_count;
@@ -561,11 +563,11 @@ async function getErrorStats(startDate?: string | null, endDate?: string | null)
 async function checkAlertRateLimit(component: string): Promise<boolean> {
   try {
     const key = `alert_rate_limit:${component}:${new Date().getHours()}`;
-    
+
     // Using Redis or similar for rate limiting
     // This is a simplified implementation
     const currentCount = 0; // Would get from Redis
-    
+
     // Max 1 alert per hour per component
     return currentCount < 1;
   } catch {
@@ -620,7 +622,7 @@ async function sendAlert(alertData: any) {
                 type: 'section',
                 text: {
                   type: 'mrkdwn',
-                  text: '*Sample Errors:*\n' + alertData.sample_errors.map((err: any) => 
+                  text: '*Sample Errors:*\n' + alertData.sample_errors.map((err: any) =>
                     `• ${err.message.substring(0, 100)}...`
                   ).join('\n'),
                 },
@@ -659,7 +661,7 @@ async function sendAlert(alertData: any) {
 async function getErrorCountLastHour(component: string): Promise<number> {
   try {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    
+
     const { count, error } = await supabase
       .from('error_logs')
       .select('*', { count: 'exact', head: true })

@@ -1,35 +1,82 @@
-interface SkeletonProps {
+import { cn } from '@/lib/utils/cn';
+
+interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string;
-  count?: number;
-  variant?: 'text' | 'circular' | 'rectangular';
-  animation?: 'pulse' | 'wave' | 'none';
 }
 
-export function Skeleton({ 
-  className = '', 
-  count = 1,
-  variant = 'rectangular',
-  animation = 'pulse'
-}: SkeletonProps) {
-  const baseClasses = 'bg-gray-200';
-  const animationClasses = animation === 'pulse' ? 'animate-pulse' : animation === 'wave' ? 'animate-shimmer' : '';
-  const variantClasses = {
-    text: 'h-4 rounded',
-    circular: 'rounded-full',
-    rectangular: 'rounded-lg',
-  }[variant];
-
-  const elements = Array.from({ length: count }, (_, i) => (
+export function Skeleton({ className, ...props }: SkeletonProps) {
+  return (
     <div
-      key={i}
-      className={`${baseClasses} ${variantClasses} ${animationClasses} ${className}`}
-      aria-hidden="true"
+      className={cn(
+        'animate-pulse rounded-md bg-gray-200 dark:bg-gray-700',
+        className
+      )}
+      {...props}
     />
-  ));
+  );
+}
 
-  if (count === 1) {
-    return elements[0];
-  }
+export function TextSkeleton({ className, ...props }: SkeletonProps) {
+  return (
+    <Skeleton
+      className={cn('h-4 w-full', className)}
+      {...props}
+    />
+  );
+}
 
-  return <>{elements}</>;
+export function AvatarSkeleton({ className, ...props }: SkeletonProps) {
+  return (
+    <Skeleton
+      className={cn('h-12 w-12 rounded-full', className)}
+      {...props}
+    />
+  );
+}
+
+export function CardSkeleton({ className, ...props }: SkeletonProps) {
+  return (
+    <div className={cn('space-y-3', className)} {...props}>
+      <Skeleton className="h-48 w-full rounded-t-lg" />
+      <div className="space-y-2 p-4">
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-4 w-2/3" />
+      </div>
+    </div>
+  );
+}
+
+export function TableRowSkeleton({ columns = 4, className, ...props }: SkeletonProps & { columns?: number }) {
+  return (
+    <div className={cn('flex space-x-4 p-4', className)} {...props}>
+      {Array.from({ length: columns }).map((_, i) => (
+        <Skeleton key={i} className="h-4 flex-1" />
+      ))}
+    </div>
+  );
+}
+
+export function ProfileSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center space-x-4">
+        <AvatarSkeleton />
+        <div className="space-y-2 flex-1">
+          <TextSkeleton className="w-48" />
+          <TextSkeleton className="w-64" />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 rounded-lg" />
+        ))}
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <TableRowSkeleton key={i} columns={3} />
+        ))}
+      </div>
+    </div>
+  );
 }

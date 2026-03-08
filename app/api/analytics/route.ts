@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/server';
 import { ratelimit } from '@/lib/redis/ratelimit';
+
+
+const supabase = createClient();
 
 export async function POST(request: NextRequest) {
   try {
     // Rate limiting
-    const ip = request.ip || 'unknown';
-    const { success, limit, reset, remaining } = await ratelimit.limit(`analytics:${ip}`);
-    
+    const ip =
+      request.headers.get('x-forwarded-for')?.split(',')[0] ||
+      request.headers.get('x-real-ip') ||
+      'unknown';
+    const { success, limit, reset, remaining } = await ratelimit.analytics(ip);
+
     if (!success) {
       return NextResponse.json(
         { error: 'Too many requests' },
-        { 
+        {
           status: 429,
           headers: {
             'X-RateLimit-Limit': limit.toString(),
@@ -40,6 +46,7 @@ export async function POST(request: NextRequest) {
     const referrer = request.headers.get('referer') || 'direct';
     const ipAddress = request.headers.get('x-forwarded-for') || request.ip || 'unknown';
 
+
     // Prepare analytics record
     const analyticsRecord = {
       type,
@@ -48,7 +55,7 @@ export async function POST(request: NextRequest) {
       user_id: userId,
       user_agent: userAgent.substring(0, 500),
       referrer: referrer.substring(0, 500),
-      ip_address: ipAddress,
+      ip_address: ipAddress.substring(0, 100),
       created_at: timestamp,
     };
 
@@ -68,22 +75,24 @@ export async function POST(request: NextRequest) {
     }
 
     // If it's an ecommerce event, update product/category analytics
-    if (sanitizedData.category === 'ecommerce') {
+    if (sanitizedData?.category === 'ecommerce') {
       await processEcommerceAnalytics(sanitizedData);
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Analytics API error:', error);
-    
+
     // Log error but don't fail the request
-    await supabase
-      .from('analytics_errors')
-      .insert({
-        error: error.message,
+    try {
+      await supabase.from('analytics_errors').insert({
+        error: error?.message || 'unknown error',
         endpoint: '/api/analytics',
         created_at: new Date().toISOString(),
       });
+    } catch (logError) {
+      console.error('Failed to log analytics error', logError);
+    }
 
     return NextResponse.json(
       { success: false, error: 'Analytics processing failed' },
@@ -119,7 +128,7 @@ export async function GET(request: NextRequest) {
 function sanitizeAnalyticsData(data: any): any {
   // Remove any sensitive information
   const sanitized = { ...data };
-  
+
   // Remove potential PII
   delete sanitized.email;
   delete sanitized.phone;
@@ -127,14 +136,14 @@ function sanitizeAnalyticsData(data: any): any {
   delete sanitized.credit_card;
   delete sanitized.token;
   delete sanitized.api_key;
-  
+
   // Truncate long strings
   Object.keys(sanitized).forEach(key => {
     if (typeof sanitized[key] === 'string' && sanitized[key].length > 1000) {
       sanitized[key] = sanitized[key].substring(0, 1000);
     }
   });
-  
+
   return sanitized;
 }
 
@@ -142,7 +151,7 @@ async function processRealTimeAnalytics(type: string, data: any, userId?: string
   try {
     const timestamp = new Date().toISOString();
     const hourKey = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
-    
+
     // Update hourly counters
     const updateData: any = {
       [`${type}_count`]: 1,
@@ -171,21 +180,21 @@ async function processRealTimeAnalytics(type: string, data: any, userId?: string
 async function processEcommerceAnalytics(data: any) {
   try {
     const { action, product_id, category_id, value } = data;
-    
+
     if (action === 'product_view' && product_id) {
       // Update product view count
       await supabase.rpc('increment_product_views', {
         product_id_param: product_id,
       });
     }
-    
+
     if (action === 'add_to_cart' && product_id) {
       // Update product cart addition count
       await supabase.rpc('increment_cart_additions', {
         product_id_param: product_id,
       });
     }
-    
+
     if (action === 'purchase' && product_id) {
       // Update product purchase count
       await supabase.rpc('increment_product_purchases', {
@@ -198,58 +207,189 @@ async function processEcommerceAnalytics(data: any) {
   }
 }
 
-async function getAggregatedAnalytics(startDate: string, endDate: string, metrics: string[]) {
+
+async function getAggregatedAnalytics(
+  startDate: string,
+  endDate: string,
+  metrics: string[]
+) {
+  try {
+    const { data, error } = await supabase.rpc('get_analytics_aggregates', {
+      start_date_param: startDate,
+      end_date_param: endDate,
+    });
+
+    if (error) {
+      console.error('Analytics aggregate RPC error:', error);
+      throw error;
+    }
+
+    const result = data?.[0] ?? {
+      pageviews: 0,
+      sessions: 0,
+      conversions: 0,
+      revenue: 0,
+    };
+
+    const response: Record<string, any> = {};
+
+    for (const metric of metrics) {
+      switch (metric) {
+        case 'pageviews':
+          response.pageviews = {
+            metric: 'pageviews',
+            value: result.pageviews ?? 0,
+          };
+          break;
+
+        case 'sessions':
+          response.sessions = {
+            metric: 'sessions',
+            value: result.sessions ?? 0,
+          };
+          break;
+
+        case 'conversions':
+          response.conversions = {
+            metric: 'conversions',
+            value: result.conversions ?? 0,
+          };
+          break;
+
+        case 'revenue':
+          response.revenue = {
+            metric: 'revenue',
+            value: result.revenue ?? 0,
+            currency: 'KES',
+          };
+          break;
+
+        default:
+          response[metric] = {
+            metric,
+            value: 0,
+          };
+      }
+    }
+
+    return response;
+  } catch (err) {
+    console.error('Analytics aggregation error:', err);
+
+    const fallback: Record<string, any> = {};
+
+    for (const metric of metrics) {
+      fallback[metric] = { metric, value: 0 };
+    }
+
+    return fallback;
+  }
+}
+
+/*
+async function getAggregatedAnalytics(
+  startDate: string,
+  endDate: string,
+  metrics: string[]
+) {
   const queries = metrics.map(async (metric) => {
-    switch (metric) {
-      case 'pageviews':
-        const { data: pageviews } = await supabase
-          .from('analytics_events')
-          .select('id', { count: 'exact' })
-          .eq('type', 'pageview')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate);
-        return { metric: 'pageviews', value: pageviews?.length || 0 };
+    try {
+      switch (metric) {
+        case 'pageviews': {
+          const { count, error } = await supabase
+            .from('analytics_events')
+            .select('*', { count: 'exact', head: true })
+            .eq('type', 'pageview')
+            .gte('created_at', startDate)
+            .lte('created_at', endDate);
 
-      case 'sessions':
-        const { data: sessions } = await supabase
-          .from('analytics_events')
-          .select('session_id')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate);
-        const uniqueSessions = new Set(sessions?.map(s => s.session_id)).size;
-        return { metric: 'sessions', value: uniqueSessions };
+          if (error) {
+            console.error('Pageviews query error:', error);
+            return { metric: 'pageviews', value: 0 };
+          }
 
-      case 'conversions':
-        const { data: conversions } = await supabase
-          .from('analytics_events')
-          .select('id', { count: 'exact' })
-          .eq('data->>action', 'purchase')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate);
-        return { metric: 'conversions', value: conversions?.length || 0 };
+          return { metric: 'pageviews', value: count ?? 0 };
+        }
 
-      case 'revenue':
-        const { data: revenueEvents } = await supabase
-          .from('analytics_events')
-          .select('data')
-          .eq('data->>action', 'purchase')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate);
-        
-        const totalRevenue = revenueEvents?.reduce((sum, event) => {
-          return sum + (event.data?.value || 0);
-        }, 0) || 0;
-        
-        return { metric: 'revenue', value: totalRevenue, currency: 'KES' };
+        case 'sessions': {
+          const { data, error } = await supabase
+            .from('analytics_events')
+            .select('session_id', { distinct: true })
+            .not('session_id', 'is', null)
+            .gte('created_at', startDate)
+            .lte('created_at', endDate);
 
-      default:
-        return { metric, value: 0 };
+          if (error) {
+            console.error('Sessions query error:', error);
+            return { metric: 'sessions', value: 0 };
+          }
+
+          return {
+            metric: 'sessions',
+            value: data?.length ?? 0,
+          };
+        }
+
+        case 'conversions': {
+          const { count, error } = await supabase
+            .from('analytics_events')
+            .select('*', { count: 'exact', head: true })
+            .eq('data->>action', 'purchase')
+            .gte('created_at', startDate)
+            .lte('created_at', endDate);
+
+          if (error) {
+            console.error('Conversions query error:', error);
+            return { metric: 'conversions', value: 0 };
+          }
+
+          return { metric: 'conversions', value: count ?? 0 };
+        }
+
+        case 'revenue': {
+          const { data, error } = await supabase
+            .from('analytics_events')
+            .select('data')
+            .eq('data->>action', 'purchase')
+            .gte('created_at', startDate)
+            .lte('created_at', endDate);
+
+          if (error) {
+            console.error('Revenue query error:', error);
+            return { metric: 'revenue', value: 0, currency: 'KES' };
+          }
+
+          const totalRevenue =
+            data?.reduce((sum: number, event: any) => {
+              const value =
+                typeof event?.data?.value === 'number'
+                  ? event.data.value
+                  : parseFloat(event?.data?.value) || 0;
+
+              return sum + value;
+            }, 0) ?? 0;
+
+          return {
+            metric: 'revenue',
+            value: totalRevenue,
+            currency: 'KES',
+          };
+        }
+
+        default:
+          return { metric, value: 0 };
+      }
+    } catch (err) {
+      console.error(`Analytics metric error (${metric}):`, err);
+      return { metric, value: 0 };
     }
   });
 
   const results = await Promise.all(queries);
+
   return results.reduce((acc, curr) => {
     acc[curr.metric] = curr;
     return acc;
   }, {} as Record<string, any>);
 }
+*/

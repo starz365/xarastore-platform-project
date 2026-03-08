@@ -93,7 +93,7 @@ export default function RegisterPage() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    
+
     if (field === 'password') {
       handlePasswordChange(value);
     }
@@ -106,7 +106,7 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -155,9 +155,10 @@ export default function RegisterPage() {
         });
       }
 
-      toast.success('Registration successful!', {
-        description: 'Please check your email to verify your account.',
-      });
+      toast.success(
+        'Account created successfully',
+        'Check your email to verify your account before signing in.'
+      );
 
       // Redirect to login page
       setTimeout(() => {
@@ -166,18 +167,19 @@ export default function RegisterPage() {
 
     } catch (error: any) {
       console.error('Registration error:', error);
-      
+
       let errorMessage = 'Registration failed. Please try again.';
-      
+
       if (error.message.includes('already exists')) {
         errorMessage = 'An account with this email already exists.';
       } else if (error.message.includes('weak password')) {
         errorMessage = 'Password is too weak. Please choose a stronger password.';
       }
 
-      toast.error('Registration Failed', {
-        description: errorMessage,
-      });
+      toast.error(
+        'Registration failed',
+        'We could not create your account. Please try again.'
+      );
 
       setErrors({
         general: errorMessage,
@@ -192,16 +194,17 @@ export default function RegisterPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
         },
       });
 
       if (error) throw error;
     } catch (error: any) {
       console.error(`${provider} registration error:`, error);
-      toast.error(`${provider} Registration Failed`, {
-        description: 'Please try again or use email registration.',
-      });
+      toast.error(
+        `${provider} Registration Failed`,
+        'Please try again or use email registration.'
+      );
     }
   };
 
@@ -363,14 +366,13 @@ export default function RegisterPage() {
                 </div>
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                   <div
-                    className={`h-full transition-all duration-300 ${
-                      passwordStrength.score === 0 ? 'w-0' :
-                      passwordStrength.score === 1 ? 'w-1/5 bg-red-500' :
-                      passwordStrength.score === 2 ? 'w-2/5 bg-orange-500' :
-                      passwordStrength.score === 3 ? 'w-3/5 bg-yellow-500' :
-                      passwordStrength.score === 4 ? 'w-4/5 bg-green-500' :
-                      'w-full bg-green-600'
-                    }`}
+                    className={`h-full transition-all duration-300 ${passwordStrength.score === 0 ? 'w-0' :
+                        passwordStrength.score === 1 ? 'w-1/5 bg-red-500' :
+                          passwordStrength.score === 2 ? 'w-2/5 bg-orange-500' :
+                            passwordStrength.score === 3 ? 'w-3/5 bg-yellow-500' :
+                              passwordStrength.score === 4 ? 'w-4/5 bg-green-500' :
+                                'w-full bg-green-600'
+                      }`}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
@@ -515,7 +517,7 @@ export default function RegisterPage() {
               disabled={isLoading}
             >
               <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
               </svg>
               Facebook
             </Button>

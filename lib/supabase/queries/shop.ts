@@ -1,8 +1,9 @@
-import { supabase } from '../server';
+import { createClient } from '../server';
 import { cache } from 'react';
 
 export const getCategories = cache(async () => {
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('categories')
       .select('id, slug, name, description, parent_id, product_count, image')
@@ -19,6 +20,7 @@ export const getCategories = cache(async () => {
 
 export const getBrands = cache(async () => {
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('brands')
       .select('id, slug, name, logo, product_count')
@@ -35,6 +37,8 @@ export const getBrands = cache(async () => {
 
 export const getProductCounts = cache(async () => {
   try {
+    const supabase = await createClient();
+    
     const { data: categories } = await supabase
       .from('categories')
       .select('id, product_count');
@@ -66,6 +70,7 @@ export const getProductCounts = cache(async () => {
 
 export const getActiveFilters = cache(async (categorySlug: string, brandSlug: string) => {
   try {
+    const supabase = await createClient();
     let category = null;
     let brand = null;
 
@@ -109,6 +114,7 @@ export const getShopProducts = cache(async (
   }
 ) => {
   try {
+    const supabase = await createClient();
     const page = filters.page || 1;
     const limit = filters.limit || 24;
     const offset = (page - 1) * limit;
@@ -196,6 +202,7 @@ export const getShopProducts = cache(async (
 
 export const getPriceRange = cache(async () => {
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('products')
       .select('price')
@@ -220,6 +227,7 @@ export const getPriceRange = cache(async () => {
 
 export const getPopularCategories = cache(async (limit: number = 6) => {
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('categories')
       .select('id, slug, name, image, product_count')
@@ -237,6 +245,7 @@ export const getPopularCategories = cache(async (limit: number = 6) => {
 
 export const getTrendingProducts = cache(async (limit: number = 8) => {
   try {
+    const supabase = await createClient();
     // Get products ordered by views or purchases (you would need to implement tracking)
     const { data, error } = await supabase
       .from('products')

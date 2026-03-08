@@ -4,7 +4,9 @@ import localFont from 'next/font/local';
 import { Providers } from './providers';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { Toaster, ToastProvider } from '@/components/shared/Toast';
+//import { Toaster, ToastProvider } from '@/components/shared/Toast';
+
+import { ToastProvider } from '@/components/ui/Toast';
 import { OfflineIndicator } from '@/components/shared/OfflineIndicator';
 import { settingsManager } from '@/lib/utils/settings';
 // Client-only PWA components
@@ -196,7 +198,6 @@ export default function RootLayout({
             <Footer />
             
             {/* TOAST NOTIFICATIONS */}
-            <Toaster />
           </ToastProvider>
         </Providers>
         

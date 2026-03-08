@@ -1,0 +1,248 @@
+'use client';
+
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+  useRef,
+} from 'react';
+import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
+import { cn } from '@/lib/utils/classNames';
+
+type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+interface Toast {
+  id: string;
+  title: string;
+  description?: string;
+  type: ToastType;
+  duration?: number;
+}
+
+interface ToastContextType {
+  toasts: Toast[];
+  addToast: (toast: Omit<Toast, 'id'>) => void;
+  removeToast: (id: string) => void;
+}
+
+const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+const toastIcons = {
+  success: CheckCircle,
+  error: XCircle,
+  warning: AlertCircle,
+  info: Info,
+};
+
+const toastColors = {
+  success: 'bg-green-50 border-green-200 text-green-800',
+  error: 'bg-red-50 border-red-200 text-red-800',
+  warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+  info: 'bg-blue-50 border-blue-200 text-blue-800',
+};
+
+function normalizeString(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string') return value;
+  if (value instanceof Error) return value.message;
+  if (typeof value === 'object') {
+    if ('description' in (value as any)) {
+      const desc = (value as any).description;
+      return typeof desc === 'string' ? desc : JSON.stringify(desc);
+    }
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+export function Toaster() {
+  const { toasts, removeToast } = useToast();
+
+  return (
+    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
+      {toasts.map((toast) => {
+        const Icon = toastIcons[toast.type];
+
+        return (
+          <div
+            key={toast.id}
+            role="status"
+            aria-live="polite"
+            className={cn(
+              'w-96 max-w-full p-4 rounded-lg border shadow-lg animate-in slide-in-from-right-10',
+              toastColors[toast.type]
+            )}
+          >
+            <div className="flex items-start gap-3">
+              <Icon className="w-5 h-5 mt-0.5 flex-shrink-0" />
+
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-sm">{toast.title}</h3>
+
+                {toast.description && (
+                  <p className="text-sm opacity-90 mt-1">
+                    {toast.description}
+                  </p>
+                )}
+              </div>
+
+              <button
+                onClick={() => removeToast(toast.id)}
+                className="p-1 hover:opacity-70 transition-opacity"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const timers = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  const addToast = (toast: Omit<Toast, 'id'>) => {
+    const id = crypto.randomUUID();
+
+    const newToast: Toast = {
+      id,
+      title: normalizeString(toast.title) ?? '',
+      description: normalizeString(toast.description),
+      type: toast.type,
+      duration: toast.duration ?? 5000,
+    };
+
+    setToasts((prev) => [...prev, newToast]);
+
+    const timer = setTimeout(() => {
+      removeToast(id);
+    }, newToast.duration);
+
+    timers.current.set(id, timer);
+  };
+
+  const removeToast = (id: string) => {
+    const timer = timers.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timers.current.delete(id);
+    }
+
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<Omit<Toast, 'id'>>;
+      addToast(custom.detail);
+    };
+
+    window.addEventListener('xarastore-toast', handler);
+
+    return () => {
+      window.removeEventListener('xarastore-toast', handler);
+      timers.current.forEach((timer) => clearTimeout(timer));
+      timers.current.clear();
+    };
+  }, []);
+
+  return (
+    <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
+      {children}
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast() {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within a ToastProvider');
+  }
+  return context;
+}
+
+export function toast(options: Omit<Toast, 'id'>) {
+  if (typeof window === 'undefined') return;
+
+  window.dispatchEvent(
+    new CustomEvent('xarastore-toast', { detail: options })
+  );
+}
+
+/* --------------------------
+   Smart helper functions
+-------------------------- */
+
+function parseDescription(
+  description?: string | { description?: string } | Error
+): string | undefined {
+  if (!description) return undefined;
+
+  if (typeof description === 'string') return description;
+
+  if (description instanceof Error) return description.message;
+
+  if (typeof description === 'object' && 'description' in description) {
+    return description.description;
+  }
+
+  return String(description);
+}
+
+toast.success = (
+  title: string,
+  description?: string | { description?: string } | Error,
+  duration?: number
+) => {
+  toast({
+    title,
+    description: parseDescription(description),
+    type: 'success',
+    duration,
+  });
+};
+
+toast.error = (
+  title: string,
+  description?: string | { description?: string } | Error,
+  duration?: number
+) => {
+  toast({
+    title,
+    description: parseDescription(description),
+    type: 'error',
+    duration,
+  });
+};
+
+toast.warning = (
+  title: string,
+  description?: string | { description?: string } | Error,
+  duration?: number
+) => {
+  toast({
+    title,
+    description: parseDescription(description),
+    type: 'warning',
+    duration,
+  });
+};
+
+toast.info = (
+  title: string,
+  description?: string | { description?: string } | Error,
+  duration?: number
+) => {
+  toast({
+    title,
+    description: parseDescription(description),
+    type: 'info',
+    duration,
+  });
+};

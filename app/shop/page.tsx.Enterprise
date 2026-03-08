@@ -1,0 +1,2166 @@
+import { Suspense } from 'react';
+import { Metadata } from 'next';
+import { notFound, redirect } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
+import { ShopClient } from './ShopClient';
+import { ProductGridSkeleton } from '@/components/product/ProductGridSkeleton';
+import { EmptyState } from '@/components/product/EmptyState';
+import { 
+  getCategories, 
+  getBrands, 
+  getProductCounts, 
+  getActiveFilters,
+  getTrendingProducts,
+  getRecommendedProducts,
+  getPriceRange 
+} from '@/lib/supabase/queries/shop';
+import { 
+  sanitizeSearchParams, 
+  validatePagination, 
+  validatePriceRange,
+  validateSortField 
+} from '@/lib/utils/validation';
+import { 
+  withPerformanceTracking,
+  withErrorBoundary,
+  withCache 
+} from '@/lib/utils/performance';
+import { cache } from 'react';
+import { z } from 'zod';
+import { Redis } from '@upstash/redis';
+import { Analytics } from '@vercel/analytics/server';
+import { FeatureFlags } from '@/lib/feature-flags';
+import { RateLimiter } from '@/lib/security/rate-limiter';
+import { AuditLogger } from '@/lib/security/audit-logger';
+import { SearchService } from '@/lib/search/meilisearch';
+import { PriceCalculator } from '@/lib/pricing/calculator';
+import { PersonalizationEngine } from '@/lib/personalization/engine';
+import { ABTestingService } from '@/lib/ab-testing/service';
+
+// Redis client for caching
+const redis = Redis.fromEnv();
+
+// Search service for advanced filtering
+const searchService = new SearchService({
+  host: process.env.MEILISEARCH_HOST!,
+  apiKey: process.env.MEILISEARCH_API_KEY!,
+  index: 'products',
+});
+
+// Extended metadata with dynamic generation
+export async function generateMetadata({ searchParams }: ShopPageProps): Promise<Metadata> {
+  const params = await searchParams;
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://xarastore.com';
+  
+  // Generate dynamic title based on filters
+  let title = 'Shop All Products | Xarastore';
+  let description = 'Browse our complete collection of products. Discover amazing deals on electronics, fashion, home goods, and more.';
+  
+  if (params.q) {
+    title = `Search Results for "${params.q}" | Xarastore`;
+    description = `Found products matching "${params.q}". Shop the best deals on Xarastore.`;
+  } else if (params.category) {
+    title = `${params.category} Products | Xarastore Shop`;
+    description = `Browse our collection of ${params.category} products. Find the best deals and latest arrivals.`;
+  } else if (params.brand) {
+    title = `${params.brand} Products | Xarastore Shop`;
+    description = `Shop ${params.brand} products at Xarastore. Discover amazing deals and authentic products.`;
+  }
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: 'website',
+      images: [
+        {
+          url: `${baseUrl}/og/shop.jpg`,
+          width: 1200,
+          height: 630,
+          alt: 'Xarastore Shop',
+        },
+      ],
+      siteName: 'Xarastore',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [`${baseUrl}/og/shop.jpg`],
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-video-preview': -1,
+        'max-image-preview': 'large',
+        'max-snippet': -1,
+      },
+    },
+    alternates: {
+      canonical: `${baseUrl}/shop${new URLSearchParams(params as any).toString() ? `?${new URLSearchParams(params as any)}` : ''}`,
+    },
+  };
+}
+
+// Enhanced validation schema with advanced features
+const searchParamsSchema = z.object({
+  q: z.string().optional().default(''),
+  category: z.string().optional().default(''),
+  brand: z.string().optional().default(''),
+  min_price: z.string().optional().transform(val => val ? parseInt(val) : undefined),
+  max_price: z.string().optional().transform(val => val ? parseInt(val) : undefined),
+  sort: z.enum([
+    'featured', 
+    'newest', 
+    'price_low', 
+    'price_high', 
+    'rating', 
+    'name_asc', 
+    'name_desc',
+    'popularity',
+    'discount',
+    'relevance'
+  ]).optional().default('featured'),
+  page: z.string().optional().transform(val => val ? parseInt(val) : 1),
+  rating: z.string().optional().transform(val => val ? parseInt(val) : undefined),
+  availability: z.enum(['all', 'in_stock', 'out_of_stock', 'pre_order']).optional().default('all'),
+  
+  // Advanced filters
+  attributes: z.string().optional().transform(val => val ? JSON.parse(decodeURIComponent(val)) : {}),
+  tags: z.string().optional().transform(val => val ? val.split(',') : []),
+  seller: z.string().optional(),
+  condition: z.enum(['new', 'used', 'refurbished']).optional(),
+  discount: z.string().optional().transform(val => val ? parseInt(val) : undefined),
+  
+  // Personalization
+  user_segment: z.string().optional(),
+  ab_test: z.string().optional(),
+  
+  // Geo-location
+  currency: z.string().optional().default('KES'),
+  country: z.string().optional(),
+  region: z.string().optional(),
+  
+  // Performance
+  view: z.enum(['grid', 'list']).optional().default('grid'),
+  limit: z.string().optional().transform(val => val ? Math.min(parseInt(val), 100) : 24),
+});
+
+interface ShopPageProps {
+  searchParams: Promise<z.infer<typeof searchParamsSchema>>;
+}
+
+// Enhanced caching with Redis
+const getCachedProducts = cache(async (
+  supabase: any,
+  filters: any,
+  page: number,
+  pageSize: number,
+  userId?: string
+) => {
+  // Generate cache key
+  const cacheKey = `shop:products:${JSON.stringify(filters)}:${page}:${pageSize}`;
+  
+  // Try Redis cache first
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return JSON.parse(cached as string);
+  }
+
+  const offset = (page - 1) * pageSize;
+
+  // Build base query with performance optimizations
+  {/*
+  let query = supabase
+    .from('products')
+    .select(`
+      *,
+      brand:brands!inner(
+        id,
+        name,
+        slug,
+        logo,
+        verified,
+        rating
+      ),
+      category:categories!inner(
+        id,
+        name,
+        slug,
+        parent_id
+      ),
+      variants:product_variants(
+        id,
+        name,
+        price,
+        stock,
+        sku,
+        attributes
+      ),
+      images:product_images(
+        id,
+        url,
+        alt,
+        position,
+        is_primary
+      ),
+      reviews:reviews(
+        id,
+        rating,
+        user_id
+      ),
+      seller:sellers(
+        id,
+        name,
+        rating,
+        verified
+      ),
+      discounts:discounts(
+        id,
+        type,
+        value,
+        start_date,
+        end_date,
+        min_quantity
+      ),
+      inventory:inventory(
+        id,
+        quantity,
+        reserved,
+        available,
+        warehouse_id
+      )
+    `, { count: 'exact' })
+    .eq('is_active', true)
+    .eq('is_approved', true)
+    .eq('deleted_at', null);
+
+  // Apply filters with proper SQL injection prevention
+  if (filters.searchQuery) {
+    // Use full-text search with ranking
+    query = query.textSearch('search_vector', filters.searchQuery, {
+      type: 'websearch',
+      config: 'english',
+    });
+  }
+  */}
+  
+  // In getCachedProducts function, update the select query:
+
+  let query = supabase
+    .from('products')
+    .select(`
+    *,
+    brand:brands!inner(
+      id,
+      name,
+      slug,
+      logo,
+      verified,
+      rating
+    ),
+    category:categories!inner(
+      id,
+      name,
+      slug,
+      parent_id
+    ),
+    variants:product_variants!product_variants_product_id_fkey(
+      id,
+      name,
+      price,
+      stock,
+      sku,
+      attributes
+    ),
+    images:product_images(
+      id,
+      url,
+      alt,
+      position,
+      is_primary
+    ),
+    reviews:reviews(
+      id,
+      rating,
+      user_id
+    ),
+    seller:sellers(
+      id,
+      name,
+      rating,
+      verified
+    ),
+    discounts:discounts(
+      id,
+      type,
+      value,
+      start_date,
+      end_date,
+      min_quantity
+    ),
+    inventory:inventory(
+      id,
+      quantity,
+      reserved,
+      available,
+      warehouse_id
+    )
+  `, { count: 'exact' })
+
+  if (filters.categorySlug) {
+    // Include subcategories
+    const { data: category } = await supabase
+      .from('categories')
+      .select('id, path')
+      .eq('slug', filters.categorySlug)
+      .single();
+    
+    if (category) {
+      query = query.or(`category_id.eq.${category.id},category.path.cs.{${category.id}}`);
+    }
+  }
+
+  if (filters.brandSlug) {
+    query = query.eq('brand.slug', filters.brandSlug);
+  }
+
+  if (filters.minPrice !== undefined) {
+    query = query.gte('price', filters.minPrice);
+  }
+
+  if (filters.maxPrice !== undefined) {
+    query = query.lte('price', filters.maxPrice);
+  }
+
+  if (filters.minRating !== undefined) {
+    query = query.gte('avg_rating', filters.minRating);
+  }
+
+  // Advanced availability filtering
+  if (filters.availability === 'in_stock') {
+    query = query.gt('inventory.available', 0);
+  } else if (filters.availability === 'out_of_stock') {
+    query = query.eq('inventory.available', 0);
+  } else if (filters.availability === 'pre_order') {
+    query = query.eq('pre_order_available', true);
+  }
+
+  // Attribute filtering
+  if (Object.keys(filters.attributes || {}).length > 0) {
+    Object.entries(filters.attributes).forEach(([key, value]) => {
+      query = query.filter('attributes', 'cs', `{"${key}": "${value}"}`);
+    });
+  }
+
+  // Tag filtering
+  if (filters.tags?.length > 0) {
+    query = query.overlaps('tags', filters.tags);
+  }
+
+  if (filters.seller) {
+    query = query.eq('seller.slug', filters.seller);
+  }
+
+  if (filters.condition) {
+    query = query.eq('condition', filters.condition);
+  }
+
+  if (filters.discount) {
+    query = query.gte('discounts.value', filters.discount);
+  }
+
+  // Apply secure sorting with multiple levels
+  const sortMapping: Record<string, { column: string; ascending: boolean }[]> = {
+    price_low: [{ column: 'price', ascending: true }],
+    price_high: [{ column: 'price', ascending: false }],
+    newest: [{ column: 'created_at', ascending: false }],
+    rating: [
+      { column: 'avg_rating', ascending: false },
+      { column: 'review_count', ascending: false }
+    ],
+    name_asc: [{ column: 'name', ascending: true }],
+    name_desc: [{ column: 'name', ascending: false }],
+    popularity: [
+      { column: 'views', ascending: false },
+      { column: 'sales_count', ascending: false }
+    ],
+    discount: [
+      { column: 'discounts.value', ascending: false },
+      { column: 'price', ascending: true }
+    ],
+    relevance: filters.searchQuery 
+      ? [{ column: 'search_rank', ascending: false }]
+      : [{ column: 'is_featured', ascending: false }],
+    featured: [
+      { column: 'is_featured', ascending: false },
+      { column: 'created_at', ascending: false }
+    ],
+  };
+
+  const sorts = sortMapping[filters.sortBy] || sortMapping.featured;
+  sorts.forEach(sort => {
+    query = query.order(sort.column, { ascending: sort.ascending });
+  });
+
+  // Apply pagination with validation
+  const validatedOffset = Math.max(0, offset);
+  const validatedLimit = Math.min(100, Math.max(1, pageSize));
+  query = query.range(validatedOffset, validatedOffset + validatedLimit - 1);
+
+  // Execute query with performance tracking
+  const startTime = Date.now();
+  const { data, error, count } = await query;
+  const queryTime = Date.now() - startTime;
+
+  // Log slow queries
+  if (queryTime > 1000) {
+    await AuditLogger.log('slow_query', {
+      query: 'getCachedProducts',
+      time: queryTime,
+      filters,
+    });
+  }
+
+  if (error) {
+    console.error('Product fetch error:', error);
+    throw new Error('Failed to fetch products');
+  }
+
+  // Calculate dynamic pricing with discounts
+  const productsWithPricing = await Promise.all(
+    (data || []).map(async (product: any) => {
+      const priceCalculator = new PriceCalculator(product);
+      return {
+        ...product,
+        calculated_price: await priceCalculator.getFinalPrice(userId),
+        discount_percentage: await priceCalculator.getDiscountPercentage(),
+        savings: await priceCalculator.getSavings(),
+        is_flash_sale: await priceCalculator.isFlashSale(),
+      };
+    })
+  );
+
+  const result = {
+    products: productsWithPricing,
+    total: count || 0,
+    queryTime,
+  };
+
+  // Cache in Redis (5 minutes TTL)
+  await redis.setex(cacheKey, 300, JSON.stringify(result));
+
+  return result;
+});
+
+// Get personalized recommendations
+const getPersonalizedProducts = cache(async (
+  supabase: any,
+  userId: string,
+  limit: number = 4
+) => {
+  const personalizationEngine = new PersonalizationEngine(userId);
+  const recommendations = await personalizationEngine.getRecommendations({
+    type: 'collaborative_filtering',
+    limit,
+  });
+
+  if (!recommendations.length) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('products')
+    .select(`
+      *,
+      brand:brands(*),
+      category:categories(*),
+      images:product_images(*)
+    `)
+    .in('id', recommendations.map(r => r.productId))
+    .eq('is_active', true)
+    .eq('is_approved', true);
+
+  if (error) {
+    console.error('Personalized products fetch error:', error);
+    return [];
+  }
+
+  return data || [];
+});
+
+// Main page component with enterprise features
+export default async function ShopPage({ searchParams }: ShopPageProps) {
+  // Initialize rate limiter
+  const rateLimiter = new RateLimiter({
+    windowMs: 60 * 1000, // 1 minute
+    maxRequests: 100,
+  });
+
+  // Check rate limit
+  const rateLimitResult = await rateLimiter.check();
+  if (!rateLimitResult.success) {
+    return new Response('Too Many Requests', { status: 429 });
+  }
+
+  try {
+    // Get user context for personalization
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
+
+    // Get A/B test assignment
+    const abTestService = new ABTestingService(userId);
+    const abTestVariant = await abTestService.getVariant('shop_page_layout');
+
+    // Validate and parse search params
+    const rawParams = await searchParams;
+    const validationResult = searchParamsSchema.safeParse(rawParams);
+    
+    if (!validationResult.success) {
+      // Log invalid params for monitoring
+      await AuditLogger.log('invalid_search_params', {
+        params: rawParams,
+        errors: validationResult.error,
+        userId,
+      });
+      
+      // Redirect to clean URL if invalid params
+      redirect('/shop');
+    }
+
+    const params = validationResult.data;
+    
+    // Sanitize inputs
+    const searchQuery = sanitizeSearchParams(params.q || '');
+    const categorySlug = sanitizeSearchParams(params.category || '');
+    const brandSlug = sanitizeSearchParams(params.brand || '');
+    
+    // Validate pagination
+    const page = validatePagination(params.page || 1);
+    const pageSize = params.limit || 24;
+    
+    // Validate price range
+    const { min: minPrice, max: maxPrice } = validatePriceRange(
+      params.min_price,
+      params.max_price
+    );
+    
+    const sortBy = validateSortField(params.sort || 'featured');
+    const minRating = params.rating ? Math.min(5, Math.max(0, params.rating)) : undefined;
+    const availability = params.availability || 'all';
+
+    // Get feature flags
+    const featureFlags = new FeatureFlags();
+    const enablePersonalization = await featureFlags.isEnabled('personalization', userId);
+    const enableSearchSuggestions = await featureFlags.isEnabled('search_suggestions', userId);
+    const enablePriceAlerts = await featureFlags.isEnabled('price_alerts', userId);
+
+    // Fetch all data in parallel with error isolation and performance tracking
+    const startTime = Date.now();
+    
+    const [
+      categoriesResult,
+      brandsResult,
+      productCountsResult,
+      activeFiltersResult,
+      productsResult,
+      featuredResult,
+      trendingResult,
+      priceRangeResult,
+      personalizedResult,
+    ] = await Promise.allSettled([
+      withPerformanceTracking('getCategories', () => getCategories()),
+      withPerformanceTracking('getBrands', () => getBrands()),
+      withPerformanceTracking('getProductCounts', () => getProductCounts()),
+      withPerformanceTracking('getActiveFilters', () => getActiveFilters(categorySlug, brandSlug)),
+      withPerformanceTracking('getCachedProducts', () => 
+        getCachedProducts(supabase, {
+          searchQuery,
+          categorySlug,
+          brandSlug,
+          minPrice,
+          maxPrice,
+          sortBy,
+          minRating,
+          availability,
+          attributes: params.attributes,
+          tags: params.tags,
+          seller: params.seller,
+          condition: params.condition,
+          discount: params.discount,
+        }, page, pageSize, userId)
+      ),
+      withPerformanceTracking('getCachedFeaturedProducts', () => 
+        getCachedFeaturedProducts(supabase)
+      ),
+      withPerformanceTracking('getTrendingProducts', () => 
+        getTrendingProducts(8)
+      ),
+      withPerformanceTracking('getPriceRange', () => 
+        getPriceRange()
+      ),
+      enablePersonalization && userId 
+        ? withPerformanceTracking('getPersonalizedProducts', () => 
+            getPersonalizedProducts(supabase, userId, 4)
+          )
+        : Promise.resolve({ status: 'fulfilled', value: [] }),
+    ]);
+
+    const pageLoadTime = Date.now() - startTime;
+
+    // Track performance
+    await Analytics.track({
+      event: 'shop_page_load',
+      properties: {
+        time: pageLoadTime,
+        userId,
+        filters: {
+          searchQuery,
+          categorySlug,
+          brandSlug,
+          sortBy,
+        },
+      },
+    });
+
+    // Handle results with proper error boundaries
+    const categories = categoriesResult.status === 'fulfilled' ? categoriesResult.value : [];
+    const brands = brandsResult.status === 'fulfilled' ? brandsResult.value : [];
+    const counts = productCountsResult.status === 'fulfilled' 
+      ? productCountsResult.value 
+      : { total: 0, categories: {}, brands: {} };
+    const activeFilters = activeFiltersResult.status === 'fulfilled' 
+      ? activeFiltersResult.value 
+      : { category: null, brand: null };
+    const priceRange = priceRangeResult.status === 'fulfilled' 
+      ? priceRangeResult.value 
+      : { min: 0, max: 100000 };
+    
+    // Handle products fetch failure gracefully
+    if (productsResult.status === 'rejected') {
+      console.error('Products fetch failed:', productsResult.reason);
+      await AuditLogger.log('products_fetch_failed', {
+        error: productsResult.reason,
+        filters: { searchQuery, categorySlug, brandSlug },
+        userId,
+      });
+      throw new Error('Failed to load products');
+    }
+    
+    const { products, total, queryTime } = productsResult.value;
+    const featured = featuredResult.status === 'fulfilled' ? featuredResult.value : [];
+    const trending = trendingResult.status === 'fulfilled' ? trendingResult.value : [];
+    const personalized = personalizedResult?.status === 'fulfilled' ? personalizedResult.value : [];
+    
+    const totalPages = Math.ceil(total / pageSize);
+
+    // Build enhanced filter options with dynamic counts
+    const filterOptions = await buildEnhancedFilterOptions({
+      categories,
+      brands,
+      counts,
+      categorySlug,
+      brandSlug,
+      minPrice,
+      maxPrice,
+      minRating,
+      availability,
+      priceRange,
+      searchQuery,
+      supabase,
+    });
+
+    // Generate breadcrumbs for SEO
+    const breadcrumbs = generateBreadcrumbs(
+      activeFilters.category,
+      activeFilters.brand,
+      searchQuery
+    );
+
+    // Generate structured data for SEO with rich snippets
+    const structuredData = generateEnhancedStructuredData({
+      total,
+      categories: categories.length,
+      brands: brands.length,
+      filters: { category: categorySlug, brand: brandSlug, searchQuery },
+      products: products.slice(0, 10), // Include top 10 products in structured data
+      priceRange,
+    });
+
+    // Check if this is first load with no data
+    const isFirstLoad = counts.total === 0 && products.length === 0 && !searchQuery;
+
+    // Get search suggestions if enabled
+    let searchSuggestions = [];
+    if (enableSearchSuggestions && searchQuery) {
+      searchSuggestions = await searchService.getSuggestions(searchQuery, {
+        limit: 5,
+        categories: categorySlug ? [categorySlug] : undefined,
+      });
+    }
+
+    // Get currency conversion
+    const currencyConverter = new CurrencyConverter();
+    const exchangeRate = await currencyConverter.getRate(params.currency, 'KES');
+
+    return (
+      <>
+        {/* Structured data for SEO */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
+
+        {/* Preload critical resources */}
+        <link
+          rel="preload"
+          href="/fonts/inter-var.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+
+        <div className="min-h-screen bg-gray-50">
+          {/* Hero Section with Dynamic Content */}
+          <div className="bg-gradient-to-r from-red-600 to-red-800 text-white">
+            <div className="container-responsive py-8 md:py-12">
+              <div className="max-w-3xl">
+                {/* Dynamic H1 based on filters */}
+                <h1 className="text-3xl md:text-4xl font-bold mb-4">
+                  {searchQuery 
+                    ? `Search Results for "${searchQuery}"` 
+                    : categorySlug && activeFilters.category
+                      ? activeFilters.category.name
+                      : brandSlug && activeFilters.brand
+                        ? `${activeFilters.brand.name} Products`
+                        : 'Shop All Products'
+                  }
+                </h1>
+                
+                {/* Dynamic description with counts */}
+                <p className="text-lg opacity-90">
+                  {searchQuery 
+                    ? `Found ${total.toLocaleString()} matching products in ${queryTime}ms`
+                    : categorySlug && activeFilters.category
+                      ? activeFilters.category.description || 
+                        `Browse ${total.toLocaleString()} products in ${activeFilters.category.name}`
+                      : brandSlug && activeFilters.brand
+                        ? `Explore ${total.toLocaleString()} products from ${activeFilters.brand.name}`
+                        : `Discover ${total.toLocaleString()} products across ${categories.length} categories`
+                  }
+                </p>
+
+                {/* Search suggestions */}
+                {searchSuggestions.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-sm opacity-75 mb-2">Suggestions:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {searchSuggestions.map((suggestion: string) => (
+                        <a
+                          key={suggestion}
+                          href={`/shop?q=${encodeURIComponent(suggestion)}`}
+                          className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-full text-sm transition-colors"
+                        >
+                          {suggestion}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick filters */}
+              <div className="mt-6 flex flex-wrap gap-2">
+                <a
+                  href="/shop?sort=newest"
+                  className={`px-4 py-2 rounded-full text-sm ${
+                    sortBy === 'newest'
+                      ? 'bg-white text-red-600'
+                      : 'bg-white/20 hover:bg-white/30'
+                  }`}
+                >
+                  New Arrivals
+                </a>
+                <a
+                  href="/shop?sort=popularity"
+                  className={`px-4 py-2 rounded-full text-sm ${
+                    sortBy === 'popularity'
+                      ? 'bg-white text-red-600'
+                      : 'bg-white/20 hover:bg-white/30'
+                  }`}
+                >
+                  Most Popular
+                </a>
+                <a
+                  href="/shop?discount=20"
+                  className={`px-4 py-2 rounded-full text-sm ${
+                    params.discount
+                      ? 'bg-white text-red-600'
+                      : 'bg-white/20 hover:bg-white/30'
+                  }`}
+                >
+                  Sale Items
+                </a>
+                <a
+                  href="/shop?availability=in_stock"
+                  className={`px-4 py-2 rounded-full text-sm ${
+                    availability === 'in_stock'
+                      ? 'bg-white text-red-600'
+                      : 'bg-white/20 hover:bg-white/30'
+                  }`}
+                >
+                  In Stock
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Breadcrumbs for SEO */}
+          {breadcrumbs.length > 0 && (
+            <div className="bg-white border-b border-gray-200">
+              <div className="container-responsive py-3">
+                <nav className="text-sm text-gray-600" aria-label="Breadcrumb">
+                  <ol className="flex items-center space-x-2 overflow-x-auto">
+                    <li>
+                      <a href="/" className="hover:text-red-600 transition-colors">
+                        Home
+                      </a>
+                    </li>
+                    {breadcrumbs.map((crumb, index) => (
+                      <li key={crumb.href} className="flex items-center">
+                        <span className="mx-2 text-gray-400" aria-hidden="true">/</span>
+                        {index === breadcrumbs.length - 1 ? (
+                          <span className="font-semibold text-gray-900" aria-current="page">
+                            {crumb.label}
+                          </span>
+                        ) : (
+                          <a
+                            href={crumb.href}
+                            className="hover:text-red-600 transition-colors"
+                          >
+                            {crumb.label}
+                          </a>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </nav>
+              </div>
+            </div>
+          )}
+
+          {/* Main Content */}
+          <div className="container-responsive py-6 md:py-8">
+            <div className="grid lg:grid-cols-4 gap-8">
+              {/* Filters Sidebar */}
+              <aside className="lg:col-span-1" aria-label="Product filters">
+                <div className="sticky top-6 space-y-6">
+                  {/* Mobile Filter Toggle */}
+                  <div className="lg:hidden">
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between p-4 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-600"
+                      onClick={() => {
+                        const sidebar = document.getElementById('filters-sidebar');
+                        sidebar?.classList.toggle('hidden');
+                      }}
+                      aria-expanded="false"
+                      aria-controls="filters-sidebar"
+                    >
+                      <span className="font-semibold">Filters & Categories</span>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Filters */}
+                  <div id="filters-sidebar" className="lg:block space-y-6 hidden lg:block">
+                    {/* Search Form with Autocomplete */}
+                    <section className="bg-white p-4 rounded-lg border border-gray-200">
+                      <h2 className="font-semibold text-gray-900 mb-3">Search Products</h2>
+                      <form method="get" action="/shop" className="space-y-3">
+                        <div className="relative">
+                          <label htmlFor="search-input" className="sr-only">
+                            Search products
+                          </label>
+                          <input
+                            id="search-input"
+                            type="text"
+                            name="q"
+                            defaultValue={searchQuery}
+                            placeholder="Search products..."
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
+                            maxLength={100}
+                            autoComplete="off"
+                          />
+                          {searchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const url = new URL(window.location.href);
+                                url.searchParams.delete('q');
+                                window.location.href = url.toString();
+                              }}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                              aria-label="Clear search"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2"
+                        >
+                          Search
+                        </button>
+                      </form>
+                    </section>
+
+                    {/* Categories with hierarchy */}
+                    {filterOptions.categories.length > 0 && (
+                      <section className="bg-white p-4 rounded-lg border border-gray-200">
+                        <h2 className="font-semibold text-gray-900 mb-3">Categories</h2>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          <a
+                            href="/shop"
+                            className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 ${
+                              !categorySlug ? 'bg-red-50 text-red-600 font-medium' : ''
+                            }`}
+                          >
+                            <span>All Categories</span>
+                            <span className="text-sm text-gray-500">{counts.total}</span>
+                          </a>
+                          {filterOptions.categories.map((category) => (
+                            <div key={category.id} className="space-y-1">
+                              <a
+                                href={`/shop?category=${encodeURIComponent(category.slug)}`}
+                                className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 ${
+                                  category.isActive ? 'bg-red-50 text-red-600 font-medium' : ''
+                                }`}
+                                aria-current={category.isActive ? 'page' : undefined}
+                              >
+                                <span className="truncate flex-1">{category.name}</span>
+                                <span className="text-sm text-gray-500 ml-2">{category.count}</span>
+                              </a>
+                              
+                              {/* Subcategories */}
+                              {category.subcategories?.length > 0 && category.isActive && (
+                                <div className="ml-4 space-y-1 border-l-2 border-gray-200 pl-2">
+                                  {category.subcategories.map((sub: any) => (
+                                    <a
+                                      key={sub.id}
+                                      href={`/shop?category=${encodeURIComponent(sub.slug)}`}
+                                      className="flex items-center justify-between p-2 rounded hover:bg-gray-50 text-sm"
+                                    >
+                                      <span className="truncate">{sub.name}</span>
+                                      <span className="text-xs text-gray-500 ml-2">{sub.count}</span>
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Brands with search */}
+                    {filterOptions.brands.length > 0 && (
+                      <section className="bg-white p-4 rounded-lg border border-gray-200">
+                        <h2 className="font-semibold text-gray-900 mb-3">Brands</h2>
+                        <div className="mb-2">
+                          <input
+                            type="text"
+                            placeholder="Search brands..."
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
+                            onChange={(e) => {
+                              // Client-side brand filtering
+                              const filter = e.target.value.toLowerCase();
+                              const items = document.querySelectorAll('.brand-item');
+                              items.forEach((item: any) => {
+                                const text = item.textContent?.toLowerCase() || '';
+                                item.style.display = text.includes(filter) ? 'flex' : 'none';
+                              });
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          <a
+                            href="/shop"
+                            className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 brand-item ${
+                              !brandSlug ? 'bg-red-50 text-red-600 font-medium' : ''
+                            }`}
+                          >
+                            <span>All Brands</span>
+                            <span className="text-sm text-gray-500">{counts.total}</span>
+                          </a>
+                          {filterOptions.brands.map((brand) => (
+                            <a
+                              key={brand.id}
+                              href={`/shop?brand=${encodeURIComponent(brand.slug)}`}
+                              className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 brand-item ${
+                                brand.isActive ? 'bg-red-50 text-red-600 font-medium' : ''
+                              }`}
+                              aria-current={brand.isActive ? 'page' : undefined}
+                            >
+                              {brand.logo && (
+                                <img
+                                  src={brand.logo}
+                                  alt=""
+                                  className="w-5 h-5 object-contain mr-2"
+                                />
+                              )}
+                              <span className="truncate flex-1">{brand.name}</span>
+                              <span className="text-sm text-gray-500 ml-2">{brand.count}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Price Range with slider */}
+                    <section className="bg-white p-4 rounded-lg border border-gray-200">
+                      <h2 className="font-semibold text-gray-900 mb-3">Price Range</h2>
+                      <form method="get" action="/shop" className="space-y-4">
+                        {/* Preserve other filters */}
+                        {Object.entries(params).map(([key, value]) => {
+                          if (!['min_price', 'max_price', 'page'].includes(key) && value) {
+                            return (
+                              <input
+                                key={key}
+                                type="hidden"
+                                name={key}
+                                value={value as string}
+                              />
+                            );
+                          }
+                          return null;
+                        })}
+
+                        {/* Price slider */}
+                        <div className="px-2">
+                          <div
+                            className="relative h-2 bg-gray-200 rounded-full"
+                            ref={(el) => {
+                              if (el) {
+                                // Initialize price slider
+                                const min = priceRange.min;
+                                const max = priceRange.max;
+                                const currentMin = minPrice || min;
+                                const currentMax = maxPrice || max;
+                                
+                                // This would be a real price slider component in production
+                              }
+                            }}
+                          >
+                            <div
+                              className="absolute h-2 bg-red-600 rounded-full"
+                              style={{
+                                left: `${((minPrice || priceRange.min) / priceRange.max) * 100}%`,
+                                right: `${100 - ((maxPrice || priceRange.max) / priceRange.max) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label htmlFor="min-price" className="block text-sm text-gray-600 mb-1">
+                              Min ({params.currency})
+                            </label>
+                            <input
+                              id="min-price"
+                              type="number"
+                              name="min_price"
+                              defaultValue={minPrice}
+                              placeholder={priceRange.min.toLocaleString()}
+                              min={priceRange.min}
+                              max={priceRange.max}
+                              step="100"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="max-price" className="block text-sm text-gray-600 mb-1">
+                              Max ({params.currency})
+                            </label>
+                            <input
+                              id="max-price"
+                              type="number"
+                              name="max_price"
+                              defaultValue={maxPrice}
+                              placeholder={priceRange.max.toLocaleString()}
+                              min={priceRange.min}
+                              max={priceRange.max}
+                              step="100"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Quick price ranges */}
+                        <div className="flex flex-wrap gap-2">
+                          {filterOptions.priceRanges.map((range) => (
+                            <a
+                              key={range.label}
+                              href={`/shop?${buildFilterUrl({
+                                ...params,
+                                min_price: range.min,
+                                max_price: range.max,
+                                page: 1,
+                              })}`}
+                              className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+                            >
+                              {range.label}
+                            </a>
+                          ))}
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2"
+                        >
+                          Apply Price Filter
+                        </button>
+                      </form>
+                    </section>
+
+                    {/* Rating Filter */}
+                    <section className="bg-white p-4 rounded-lg border border-gray-200">
+                      <h2 className="font-semibold text-gray-900 mb-3">Customer Rating</h2>
+                      <div className="space-y-2">
+                        {filterOptions.ratings.map((rating) => (
+                          <a
+                            key={rating.value}
+                            href={`/shop?${buildFilterUrl({ ...params, rating: rating.value, page: 1 })}`}
+                            className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 ${
+                              minRating === rating.value ? 'bg-red-50 text-red-600 font-medium' : ''
+                            }`}
+                            aria-current={minRating === rating.value ? 'page' : undefined}
+                          >
+                            <div className="flex items-center">
+                              <div className="flex items-center text-yellow-400 mr-2">
+                                {[...Array(5)].map((_, i) => (
+                                  <svg
+                                    key={i}
+                                    className={`w-4 h-4 ${i < rating.value ? 'fill-current' : 'fill-gray-300'}`}
+                                    viewBox="0 0 20 20"
+                                  >
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                  </svg>
+                                ))}
+                              </div>
+                              <span className="text-sm">& Up</span>
+                            </div>
+                            <span className="text-sm text-gray-500">{rating.count}</span>
+                          </a>
+                        ))}
+                      </div>
+                    </section>
+
+                    {/* Availability */}
+                    <section className="bg-white p-4 rounded-lg border border-gray-200">
+                      <h2 className="font-semibold text-gray-900 mb-3">Availability</h2>
+                      <div className="space-y-2">
+                        {filterOptions.availability.map((option) => (
+                          <a
+                            key={option.value}
+                            href={`/shop?${buildFilterUrl({ ...params, availability: option.value, page: 1 })}`}
+                            className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 ${
+                              availability === option.value ? 'bg-red-50 text-red-600 font-medium' : ''
+                            }`}
+                            aria-current={availability === option.value ? 'page' : undefined}
+                          >
+                            <span>{option.label}</span>
+                            <span className="text-sm text-gray-500">{option.count}</span>
+                          </a>
+                        ))}
+                      </div>
+                    </section>
+
+                    {/* Clear Filters */}
+                    {(searchQuery || categorySlug || brandSlug || minPrice || maxPrice || minRating || availability !== 'all') && (
+                      <section className="bg-white p-4 rounded-lg border border-gray-200">
+                        <a
+                          href="/shop"
+                          className="block w-full py-2 text-center text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2"
+                        >
+                          Clear All Filters
+                        </a>
+                      </section>
+                    )}
+                  </div>
+                </div>
+              </aside>
+
+              {/* Products Grid */}
+              <main className="lg:col-span-3" aria-label="Product listing">
+                {/* Toolbar */}
+                <div className="bg-white p-4 rounded-lg border border-gray-200 mb-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="text-sm text-gray-600">
+                      Showing <span className="font-semibold">{products.length > 0 ? ((page - 1) * pageSize) + 1 : 0}</span>-
+                      <span className="font-semibold">{Math.min(page * pageSize, total)}</span> of{' '}
+                      <span className="font-semibold">{total.toLocaleString()}</span> products
+                      {queryTime && <span className="text-gray-400 ml-2">({queryTime}ms)</span>}
+                    </div>
+                    
+                    <div className="flex items-center space-x-4">
+                      {/* Items per page */}
+                      <div className="flex items-center space-x-2">
+                        <label htmlFor="limit-select" className="text-sm text-gray-600">
+                          Show:
+                        </label>
+                        <select
+                          id="limit-select"
+                          value={pageSize}
+                          onChange={(e) => {
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('limit', e.target.value);
+                            url.searchParams.delete('page');
+                            window.location.href = url.toString();
+                          }}
+                          className="px-2 py-2 border border-gray-300 rounded-lg text-sm focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
+                        >
+                          <option value="24">24</option>
+                          <option value="48">48</option>
+                          <option value="72">72</option>
+                          <option value="96">96</option>
+                        </select>
+                      </div>
+
+                      {/* Sort */}
+                      <div className="flex items-center space-x-2">
+                        <label htmlFor="sort-select" className="text-sm text-gray-600">
+                          Sort by:
+                        </label>
+                        <select
+                          id="sort-select"
+                          name="sort"
+                          value={sortBy}
+                          onChange={(e) => {
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('sort', e.target.value);
+                            url.searchParams.delete('page');
+                            window.location.href = url.toString();
+                          }}
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
+                          aria-label="Sort products by"
+                        >
+                          <option value="featured">Featured</option>
+                          <option value="newest">Newest Arrivals</option>
+                          <option value="price_low">Price: Low to High</option>
+                          <option value="price_high">Price: High to Low</option>
+                          <option value="rating">Customer Rating</option>
+                          <option value="name_asc">Name: A to Z</option>
+                          <option value="name_desc">Name: Z to A</option>
+                          <option value="popularity">Most Popular</option>
+                          <option value="discount">Biggest Discount</option>
+                          {searchQuery && <option value="relevance">Relevance</option>}
+                        </select>
+                      </div>
+
+                      {/* View Toggle */}
+                      <div className="flex items-center space-x-1 border border-gray-300 rounded-lg p-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('view', 'grid');
+                            window.location.href = url.toString();
+                          }}
+                          className={`p-2 rounded focus:outline-none focus:ring-2 focus:ring-red-600 ${
+                            params.view === 'grid' ? 'bg-gray-100' : 'hover:bg-gray-100'
+                          }`}
+                          aria-label="Grid view"
+                          data-view-mode="grid"
+                        >
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                            <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('view', 'list');
+                            window.location.href = url.toString();
+                          }}
+                          className={`p-2 rounded focus:outline-none focus:ring-2 focus:ring-red-600 ${
+                            params.view === 'list' ? 'bg-gray-100' : 'hover:bg-gray-100'
+                          }`}
+                          aria-label="List view"
+                          data-view-mode="list"
+                        >
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                            <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Active Filters */}
+                {activeFilters.category || activeFilters.brand || searchQuery || minPrice || maxPrice || minRating || availability !== 'all' ? (
+                  <div className="mb-6" aria-label="Active filters">
+                    <div className="flex flex-wrap gap-2">
+                      {activeFilters.category && (
+                        <span className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-800 rounded-full text-sm">
+                          Category: {activeFilters.category.name}
+                          <a
+                            href={`/shop?${removeFilterFromQuery(params, 'category')}`}
+                            className="ml-2 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded"
+                            aria-label={`Remove category filter: ${activeFilters.category.name}`}
+                          >
+                            ×
+                          </a>
+                        </span>
+                      )}
+                      {activeFilters.brand && (
+                        <span className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-800 rounded-full text-sm">
+                          Brand: {activeFilters.brand.name}
+                          <a
+                            href={`/shop?${removeFilterFromQuery(params, 'brand')}`}
+                            className="ml-2 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded"
+                            aria-label={`Remove brand filter: ${activeFilters.brand.name}`}
+                          >
+                            ×
+                          </a>
+                        </span>
+                      )}
+                      {searchQuery && (
+                        <span className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-800 rounded-full text-sm">
+                          Search: "{searchQuery}"
+                          <a
+                            href={`/shop?${removeFilterFromQuery(params, 'q')}`}
+                            className="ml-2 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded"
+                            aria-label="Remove search filter"
+                          >
+                            ×
+                          </a>
+                        </span>
+                      )}
+                      {(minPrice || maxPrice) && (
+                        <span className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-800 rounded-full text-sm">
+                          Price: {minPrice ? `${params.currency} ${minPrice.toLocaleString()}` : 'Min'} - {maxPrice ? `${params.currency} ${maxPrice.toLocaleString()}` : 'Max'}
+                          <a
+                            href={`/shop?${removeFilterFromQuery(params, ['min_price', 'max_price'])}`}
+                            className="ml-2 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded"
+                            aria-label="Remove price filter"
+                          >
+                            ×
+                          </a>
+                        </span>
+                      )}
+                      {minRating && (
+                        <span className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-800 rounded-full text-sm">
+                          {minRating}+ Stars
+                          <a
+                            href={`/shop?${removeFilterFromQuery(params, 'rating')}`}
+                            className="ml-2 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded"
+                            aria-label="Remove rating filter"
+                          >
+                            ×
+                          </a>
+                        </span>
+                      )}
+                      {availability !== 'all' && (
+                        <span className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-800 rounded-full text-sm">
+                          {availability === 'in_stock' ? 'In Stock' : availability === 'out_of_stock' ? 'Out of Stock' : 'Pre-Order'}
+                          <a
+                            href={`/shop?${removeFilterFromQuery(params, 'availability')}`}
+                            className="ml-2 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded"
+                            aria-label="Remove availability filter"
+                          >
+                            ×
+                          </a>
+                        </span>
+                      )}
+                      {params.discount && (
+                        <span className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-800 rounded-full text-sm">
+                          {params.discount}%+ Off
+                          <a
+                            href={`/shop?${removeFilterFromQuery(params, 'discount')}`}
+                            className="ml-2 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded"
+                            aria-label="Remove discount filter"
+                          >
+                            ×
+                          </a>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Products Grid */}
+                {isFirstLoad ? (
+                  <EmptyState
+                    title="Welcome to Xarastore Shop!"
+                    description="Our product catalog is currently being set up. Products will appear here once they are added by our administrators."
+                    icon="cart"
+                    action={{
+                      label: "Browse Categories",
+                      href: "/categories"
+                    }}
+                  />
+                ) : products.length === 0 ? (
+                  <EmptyState
+                    title="No products found"
+                    description="Try adjusting your filters or search terms to find what you're looking for."
+                    icon="search"
+                    action={{
+                      label: "Clear Filters",
+                      href: "/shop"
+                    }}
+                  />
+                ) : (
+                  <>
+                    <Suspense fallback={<ProductGridSkeleton count={pageSize} layout={params.view as 'grid' | 'list'} />}>
+                      <ShopClient
+                        initialProducts={products}
+                        total={total}
+                        page={page}
+                        totalPages={totalPages}
+                        searchQuery={searchQuery}
+                        filters={{
+                          category: categorySlug,
+                          brand: brandSlug,
+                          minPrice,
+                          maxPrice,
+                          sortBy,
+                          minRating,
+                          availability,
+                          view: params.view as 'grid' | 'list',
+                          currency: params.currency,
+                        }}
+                        userId={userId}
+                        abTestVariant={abTestVariant}
+                      />
+                    </Suspense>
+
+                    {/* Pagination with jump to page */}
+                    {totalPages > 1 && (
+                      <nav className="mt-8 flex flex-col items-center space-y-4" aria-label="Pagination">
+                        <div className="flex items-center space-x-2">
+                          <a
+                            href={`/shop?${buildPageUrl(params, page - 1)}`}
+                            className={`px-3 py-2 border rounded-lg ${
+                              page === 1
+                                ? 'border-gray-300 text-gray-400 cursor-not-allowed pointer-events-none'
+                                : 'border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-600'
+                            }`}
+                            aria-disabled={page === 1}
+                            aria-label="Go to previous page"
+                          >
+                            Previous
+                          </a>
+                          
+                          {generatePaginationItems(page, totalPages).map((item, index) => (
+                            <a
+                              key={index}
+                              href={item === '...' ? '#' : `/shop?${buildPageUrl(params, item as number)}`}
+                              className={`px-3 py-2 border rounded-lg ${
+                                item === page
+                                  ? 'border-red-600 bg-red-600 text-white'
+                                  : item === '...'
+                                  ? 'border-transparent cursor-default'
+                                  : 'border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-600'
+                              }`}
+                              aria-current={item === page ? 'page' : undefined}
+                              aria-label={item === '...' ? 'More pages' : `Go to page ${item}`}
+                            >
+                              {item}
+                            </a>
+                          ))}
+                          
+                          <a
+                            href={`/shop?${buildPageUrl(params, page + 1)}`}
+                            className={`px-3 py-2 border rounded-lg ${
+                              page === totalPages
+                                ? 'border-gray-300 text-gray-400 cursor-not-allowed pointer-events-none'
+                                : 'border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-600'
+                            }`}
+                            aria-disabled={page === totalPages}
+                            aria-label="Go to next page"
+                          >
+                            Next
+                          </a>
+                        </div>
+
+                        {/* Jump to page */}
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm text-gray-600">Go to page:</span>
+                          <input
+                            type="number"
+                            min="1"
+                            max={totalPages}
+                            defaultValue={page}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded-lg text-sm focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const targetPage = parseInt((e.target as HTMLInputElement).value);
+                                if (targetPage >= 1 && targetPage <= totalPages) {
+                                  window.location.href = `/shop?${buildPageUrl(params, targetPage)}`;
+                                }
+                              }
+                            }}
+                          />
+                        </div>
+                      </nav>
+                    )}
+                  </>
+                )}
+
+                {/* Trending Products Section */}
+                {trending.length > 0 && products.length > 0 && (
+                  <section className="mt-12 pt-8 border-t border-gray-200" aria-label="Trending products">
+                    <h2 className="text-2xl font-bold mb-6">🔥 Trending Now</h2>
+                    <Suspense fallback={<ProductGridSkeleton count={4} />}>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        {trending.map((product) => (
+                          <ProductCard
+                            key={product.id}
+                            product={product}
+                            layout="vertical"
+                            showBadge="trending"
+                          />
+                        ))}
+                      </div>
+                    </Suspense>
+                  </section>
+                )}
+
+                {/* Personalized Recommendations */}
+                {personalized.length > 0 && enablePersonalization && (
+                  <section className="mt-12 pt-8 border-t border-gray-200" aria-label="Recommended for you">
+                    <h2 className="text-2xl font-bold mb-6">🎯 Recommended for You</h2>
+                    <Suspense fallback={<ProductGridSkeleton count={4} />}>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        {personalized.map((product) => (
+                          <ProductCard
+                            key={product.id}
+                            product={product}
+                            layout="vertical"
+                            showBadge="recommended"
+                          />
+                        ))}
+                      </div>
+                    </Suspense>
+                  </section>
+                )}
+
+                {/* Featured Products Section */}
+                {featured.length > 0 && products.length > 0 && (
+                  <section className="mt-12 pt-8 border-t border-gray-200" aria-label="Featured products">
+                    <h2 className="text-2xl font-bold mb-6">✨ Featured Products</h2>
+                    <Suspense fallback={<ProductGridSkeleton count={4} />}>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        {featured.map((product) => (
+                          <ProductCard
+                            key={product.id}
+                            product={product}
+                            layout="vertical"
+                            showBadge="featured"
+                          />
+                        ))}
+                      </div>
+                    </Suspense>
+                  </section>
+                )}
+
+                {/* Recently Viewed */}
+                {userId && (
+                  <RecentlyViewed userId={userId} />
+                )}
+
+                {/* Price Alert Signup */}
+                {enablePriceAlerts && searchQuery && (
+                  <PriceAlertSignup
+                    searchQuery={searchQuery}
+                    filters={{ categorySlug, brandSlug, minPrice, maxPrice }}
+                  />
+                )}
+              </main>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  } catch (error) {
+    console.error('Shop page error:', error);
+    
+    // Log error for monitoring
+    await AuditLogger.log('shop_page_error', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    // Track error
+    await Analytics.track({
+      event: 'shop_page_error',
+      properties: {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+    });
+    
+    // Return a user-friendly error page with retry mechanism
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md text-center">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-3">Unable to load products</h1>
+          <p className="text-gray-600 mb-6">
+            We're having trouble loading the shop page right now. Please try again later or contact support if the problem persists.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-block w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2"
+            >
+              Try Again
+            </button>
+            <a
+              href="/"
+              className="inline-block w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2"
+            >
+              Return to Home
+            </a>
+            <a
+              href="/support"
+              className="inline-block text-sm text-gray-500 hover:text-gray-700"
+            >
+              Contact Support
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+// Cache featured products with Redis
+const getCachedFeaturedProducts = cache(async (supabase: any) => {
+  const cacheKey = 'shop:featured';
+  
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return JSON.parse(cached as string);
+  }
+
+  const { data, error } = await supabase
+    .from('products')
+    .select(`
+      *,
+      brand:brands(
+        id,
+        name,
+        slug,
+        logo
+      ),
+      category:categories(
+        id,
+        name,
+        slug
+      ),
+      images:product_images(
+        id,
+        url,
+        alt,
+        position
+      )
+    `)
+    .eq('is_featured', true)
+    .eq('is_active', true)
+    .eq('is_approved', true)
+    .gt('stock', 0)
+    .order('created_at', { ascending: false })
+    .limit(8);
+
+  if (error) {
+    console.error('Featured products fetch error:', error);
+    return [];
+  }
+
+  await redis.setex(cacheKey, 3600, JSON.stringify(data || [])); // 1 hour cache
+
+  return data || [];
+});
+
+// Enhanced filter options builder
+async function buildEnhancedFilterOptions({
+  categories,
+  brands,
+  counts,
+  categorySlug,
+  brandSlug,
+  minPrice,
+  maxPrice,
+  minRating,
+  availability,
+  priceRange,
+  searchQuery,
+  supabase,
+}: any) {
+  // Build category hierarchy
+  const categoryMap = new Map();
+  const rootCategories = [];
+  
+  for (const cat of categories) {
+    categoryMap.set(cat.id, { ...cat, subcategories: [] });
+  }
+  
+  for (const cat of categories) {
+    if (cat.parent_id) {
+      const parent = categoryMap.get(cat.parent_id);
+      if (parent) {
+        parent.subcategories.push(categoryMap.get(cat.id));
+      }
+    } else {
+      rootCategories.push(categoryMap.get(cat.id));
+    }
+  }
+
+  // Get counts for ratings
+  const ratingCounts = await Promise.all(
+    [4, 3, 2, 1].map(async (rating) => {
+      let query = supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .eq('is_approved', true)
+        .gte('avg_rating', rating);
+
+      if (categorySlug) {
+        query = query.eq('categories.slug', categorySlug);
+      }
+      if (brandSlug) {
+        query = query.eq('brands.slug', brandSlug);
+      }
+      if (searchQuery) {
+        query = query.textSearch('search_vector', searchQuery);
+      }
+
+      const { count } = await query;
+      return count || 0;
+    })
+  );
+
+  // Get counts for availability
+  const availabilityCounts = await Promise.all(
+    ['in_stock', 'out_of_stock', 'pre_order'].map(async (status) => {
+      let query = supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .eq('is_approved', true);
+
+      if (status === 'in_stock') {
+        query = query.gt('inventory.available', 0);
+      } else if (status === 'out_of_stock') {
+        query = query.eq('inventory.available', 0);
+      } else if (status === 'pre_order') {
+        query = query.eq('pre_order_available', true);
+      }
+
+      if (categorySlug) {
+        query = query.eq('categories.slug', categorySlug);
+      }
+      if (brandSlug) {
+        query = query.eq('brands.slug', brandSlug);
+      }
+
+      const { count } = await query;
+      return count || 0;
+    })
+  );
+
+  return {
+    categories: rootCategories
+      .filter(cat => cat.product_count > 0)
+      .map(cat => ({
+        id: cat.id,
+        slug: cat.slug,
+        name: cat.name,
+        count: counts.categories[cat.id] || 0,
+        isActive: cat.slug === categorySlug,
+        subcategories: cat.subcategories
+          .filter((sub: any) => sub.product_count > 0)
+          .map((sub: any) => ({
+            id: sub.id,
+            slug: sub.slug,
+            name: sub.name,
+            count: counts.categories[sub.id] || 0,
+          })),
+      }))
+      .sort((a, b) => b.count - a.count),
+    
+    brands: brands
+      .filter((brand: any) => brand.product_count > 0)
+      .map((brand: any) => ({
+        id: brand.id,
+        slug: brand.slug,
+        name: brand.name,
+        logo: brand.logo,
+        count: counts.brands[brand.id] || 0,
+        isActive: brand.slug === brandSlug,
+        verified: brand.verified,
+      }))
+      .sort((a: any, b: any) => b.count - a.count),
+    
+    priceRanges: generatePriceRanges(priceRange),
+    ratings: [
+      { value: 4, label: '4★ & above', count: ratingCounts[0] },
+      { value: 3, label: '3★ & above', count: ratingCounts[1] },
+      { value: 2, label: '2★ & above', count: ratingCounts[2] },
+      { value: 1, label: '1★ & above', count: ratingCounts[3] },
+    ],
+    availability: [
+      { value: 'all', label: 'All Products', count: counts.total },
+      { value: 'in_stock', label: 'In Stock', count: availabilityCounts[0] },
+      { value: 'out_of_stock', label: 'Out of Stock', count: availabilityCounts[1] },
+      { value: 'pre_order', label: 'Pre-Order', count: availabilityCounts[2] },
+    ],
+  };
+}
+
+// Enhanced price ranges with dynamic steps
+function generatePriceRanges(priceRange: { min: number; max: number }): PriceRange[] {
+  const ranges: PriceRange[] = [];
+  const step = Math.ceil((priceRange.max - priceRange.min) / 5);
+  
+  for (let i = 0; i < 5; i++) {
+    const min = i === 0 ? priceRange.min : priceRange.min + (step * i);
+    const max = i === 4 ? priceRange.max : priceRange.min + (step * (i + 1));
+    
+    ranges.push({
+      min,
+      max,
+      label: `${min.toLocaleString()} - ${max.toLocaleString()}`,
+    });
+  }
+  
+  return ranges;
+}
+
+// Enhanced structured data with rich snippets
+function generateEnhancedStructuredData({ total, categories, brands, filters, products, priceRange }: any): any {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://xarastore.com';
+  const currentUrl = `${baseUrl}/shop${filters.searchQuery ? `?q=${encodeURIComponent(filters.searchQuery)}` : ''}`;
+  
+  let description = `Shop ${total.toLocaleString()} products`;
+  if (filters.category) {
+    description = `Browse ${filters.category} products`;
+  } else if (filters.brand) {
+    description = `Shop ${filters.brand} products`;
+  } else if (filters.searchQuery) {
+    description = `Search results for "${filters.searchQuery}"`;
+  }
+  
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: 'Shop Products | Xarastore',
+    description,
+    url: currentUrl,
+    mainEntity: {
+      '@type': 'ItemList',
+      itemListElement: products.map((product: any, index: number) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        item: {
+          '@type': 'Product',
+          name: product.name,
+          description: product.description,
+          image: product.images?.[0]?.url,
+          offers: {
+            '@type': 'Offer',
+            price: product.calculated_price || product.price,
+            priceCurrency: 'KES',
+            availability: product.stock > 0 
+              ? 'https://schema.org/InStock'
+              : 'https://schema.org/OutOfStock',
+          },
+          aggregateRating: product.avg_rating ? {
+            '@type': 'AggregateRating',
+            ratingValue: product.avg_rating,
+            reviewCount: product.review_count,
+          } : undefined,
+          brand: product.brand?.name,
+        },
+      })),
+      numberOfItems: total,
+    },
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${baseUrl}/shop?q={search_term_string}`,
+      'query-input': 'required name=search_term_string',
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Xarastore',
+      logo: {
+        '@type': 'ImageObject',
+        url: `${baseUrl}/logo.png`,
+      },
+      sameAs: [
+        'https://facebook.com/xarastore',
+        'https://twitter.com/xarastore',
+        'https://instagram.com/xarastore',
+      ],
+    },
+    breadcrumb: {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        {
+          '@type': 'ListItem',
+          position: 1,
+          name: 'Home',
+          item: baseUrl,
+        },
+        {
+          '@type': 'ListItem',
+          position: 2,
+          name: 'Shop',
+          item: currentUrl,
+        },
+        ...(filters.category ? [{
+          '@type': 'ListItem',
+          position: 3,
+          name: filters.category,
+          item: `${baseUrl}/shop?category=${filters.category}`,
+        }] : []),
+        ...(filters.brand ? [{
+          '@type': 'ListItem',
+          position: 4,
+          name: filters.brand,
+          item: `${baseUrl}/shop?brand=${filters.brand}`,
+        }] : []),
+      ],
+    },
+    offers: {
+      '@type': 'AggregateOffer',
+      lowPrice: priceRange.min,
+      highPrice: priceRange.max,
+      priceCurrency: 'KES',
+      offerCount: total,
+    },
+  };
+}
+
+// Recently viewed component
+function RecentlyViewed({ userId }: { userId: string }) {
+  const [recentProducts, setRecentProducts] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadRecentlyViewed = async () => {
+      const response = await fetch(`/api/users/${userId}/recently-viewed`);
+      const data = await response.json();
+      setRecentProducts(data);
+    };
+    loadRecentlyViewed();
+  }, [userId]);
+
+  if (!recentProducts.length) return null;
+
+  return (
+    <section className="mt-12 pt-8 border-t border-gray-200" aria-label="Recently viewed">
+      <h2 className="text-2xl font-bold mb-6">👀 Recently Viewed</h2>
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        {recentProducts.map((product) => (
+          <ProductCard
+            key={product.id}
+            product={product}
+            layout="compact"
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// Price alert signup component
+function PriceAlertSignup({ searchQuery, filters }: { searchQuery: string; filters: any }) {
+  const [email, setEmail] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const response = await fetch('/api/price-alerts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        searchQuery,
+        filters,
+      }),
+    });
+
+    if (response.ok) {
+      setSubmitted(true);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded-lg">
+        <p className="text-green-800">
+          ✅ We'll notify you when prices drop for "{searchQuery}"
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-8 p-6 bg-gray-50 border border-gray-200 rounded-lg">
+      <h3 className="font-semibold text-gray-900 mb-2">
+        🔔 Get notified when prices drop
+      </h3>
+      <p className="text-sm text-gray-600 mb-4">
+        We'll send you an email when products matching "{searchQuery}" go on sale
+      </p>
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Enter your email"
+          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
+          required
+        />
+        <button
+          type="submit"
+          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+        >
+          Notify Me
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// Helper functions (keep existing ones but enhance with types)
+interface PriceRange {
+  min: number | null;
+  max: number | null;
+  label: string;
+}
+
+interface Breadcrumb {
+  label: string;
+  href: string;
+}
+
+function generateBreadcrumbs(
+  category: any | null,
+  brand: any | null,
+  searchQuery: string
+): Breadcrumb[] {
+  const breadcrumbs: Breadcrumb[] = [];
+
+  if (searchQuery) {
+    breadcrumbs.push({
+      label: `Search: "${searchQuery}"`,
+      href: `/shop?q=${encodeURIComponent(searchQuery)}`,
+    });
+  } else {
+    if (category) {
+      breadcrumbs.push({
+        label: category.name,
+        href: `/shop?category=${encodeURIComponent(category.slug)}`,
+      });
+    }
+    if (brand) {
+      breadcrumbs.push({
+        label: brand.name,
+        href: `/shop?brand=${encodeURIComponent(brand.slug)}`,
+      });
+    }
+  }
+
+  return breadcrumbs;
+}
+
+function buildPageUrl(params: any, page: number): string {
+  const urlParams = new URLSearchParams();
+  
+  Object.entries(params).forEach(([key, value]) => {
+    if (value && key !== 'page') {
+      urlParams.set(key, String(value));
+    }
+  });
+  
+  urlParams.set('page', page.toString());
+  
+  return urlParams.toString();
+}
+
+function buildFilterUrl(params: any): string {
+  const urlParams = new URLSearchParams();
+  
+  Object.entries(params).forEach(([key, value]) => {
+    if (value && key !== 'page') {
+      urlParams.set(key, String(value));
+    }
+  });
+  
+  return urlParams.toString();
+}
+
+function removeFilterFromQuery(params: any, filterNames: string | string[]): string {
+  const urlParams = new URLSearchParams();
+  const names = Array.isArray(filterNames) ? filterNames : [filterNames];
+  
+  Object.entries(params).forEach(([key, value]) => {
+    if (value && !names.includes(key) && key !== 'page') {
+      urlParams.set(key, String(value));
+    }
+  });
+  
+  return urlParams.toString();
+}
+
+function generatePaginationItems(currentPage: number, totalPages: number) {
+  const items = [];
+  const maxVisible = 7;
+  
+  if (totalPages <= maxVisible) {
+    for (let i = 1; i <= totalPages; i++) {
+      items.push(i);
+    }
+  } else {
+    items.push(1);
+    
+    if (currentPage > 4) {
+      items.push('...');
+    }
+    
+    const start = Math.max(2, currentPage - 2);
+    const end = Math.min(totalPages - 1, currentPage + 2);
+    
+    for (let i = start; i <= end; i++) {
+      items.push(i);
+    }
+    
+    if (currentPage < totalPages - 3) {
+      items.push('...');
+    }
+    
+    items.push(totalPages);
+  }
+  
+  return items;
+}

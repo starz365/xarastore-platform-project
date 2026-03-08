@@ -1,0 +1,272 @@
+'use client';
+
+import { useEffect, useCallback, ReactNode } from 'react';
+import { X } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
+import { Button } from './Button';
+
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: string;
+  description?: string;
+  children: ReactNode;
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  closeOnClickOutside?: boolean;
+  showCloseButton?: boolean;
+  footer?: ReactNode;
+  className?: string;
+}
+
+const sizeClasses = {
+  sm: 'max-w-md',
+  md: 'max-w-lg',
+  lg: 'max-w-2xl',
+  xl: 'max-w-4xl',
+  full: 'max-w-[90vw] max-h-[90vh]',
+};
+
+export function Modal({
+  isOpen,
+  onClose,
+  title,
+  description,
+  children,
+  size = 'md',
+  closeOnClickOutside = true,
+  showCloseButton = true,
+  footer,
+  className,
+}: ModalProps) {
+  const handleEscape = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose();
+    }
+  }, [onClose]);
+
+  const handleClickOutside = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (closeOnClickOutside && e.target === e.currentTarget) {
+      onClose();
+    }
+  }, [closeOnClickOutside, onClose]);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, handleEscape]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in"
+      onClick={handleClickOutside}
+    >
+      <div
+        className={cn(
+          'relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full animate-in zoom-in-95 slide-in-from-bottom-4',
+          sizeClasses[size],
+          className
+        )}
+      >
+        {/* Header */}
+        {(title || showCloseButton) && (
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="space-y-1">
+              {title && (
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  {title}
+                </h2>
+              )}
+              {description && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {description}
+                </p>
+              )}
+            </div>
+            {showCloseButton && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="w-8 h-8 p-0 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <X className="w-4 h-4" />
+                <span className="sr-only">Close</span>
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+          {children}
+        </div>
+
+        {/* Footer */}
+        {footer && (
+          <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700">
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function ConfirmModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  title = 'Confirm Action',
+  description = 'Are you sure you want to proceed? This action cannot be undone.',
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  variant = 'danger',
+  isLoading = false,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title?: string;
+  description?: string;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: 'primary' | 'danger' | 'warning';
+  isLoading?: boolean;
+}) {
+  const variantStyles = {
+    primary: 'bg-blue-600 hover:bg-blue-700',
+    danger: 'bg-red-600 hover:bg-red-700',
+    warning: 'bg-yellow-600 hover:bg-yellow-700',
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      size="sm"
+      footer={
+        <>
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            disabled={isLoading}
+          >
+            {cancelText}
+          </Button>
+          <Button
+            variant="primary"
+            onClick={onConfirm}
+            loading={isLoading}
+            className={variantStyles[variant]}
+          >
+            {confirmText}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-gray-600 dark:text-gray-400">{description}</p>
+    </Modal>
+  );
+}
+
+export function FullScreenModal({
+  isOpen,
+  onClose,
+  title,
+  children,
+}: Omit<ModalProps, 'size'>) {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      size="full"
+      closeOnClickOutside={false}
+      className="h-[90vh] flex flex-col"
+    >
+      <div className="flex-1 overflow-y-auto">
+        {children}
+      </div>
+    </Modal>
+  );
+}
+
+export function SlideOver({
+  isOpen,
+  onClose,
+  title,
+  children,
+  position = 'right',
+  size = 'md',
+}: Omit<ModalProps, 'size'> & {
+  position?: 'left' | 'right';
+  size?: 'sm' | 'md' | 'lg';
+}) {
+  const positionClasses = {
+    left: 'left-0 translate-x-0',
+    right: 'right-0 translate-x-0',
+  };
+
+  const sizeClasses = {
+    sm: 'max-w-md',
+    md: 'max-w-lg',
+    lg: 'max-w-2xl',
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        className={cn(
+          'fixed top-0 h-full w-full bg-white dark:bg-gray-900 shadow-2xl animate-in slide-in-from-right',
+          positionClasses[position],
+          sizeClasses[size]
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              {title}
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="w-8 h-8 p-0 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

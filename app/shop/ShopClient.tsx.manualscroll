@@ -1,0 +1,291 @@
+'use client';
+
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Product } from '@/types';
+import { ProductCard } from '@/components/product/ProductCard';
+import { ProductGridSkeleton } from '@/components/product/ProductGridSkeleton';
+import { EmptyState } from '@/components/product/EmptyState';
+import { Pagination } from '@/components/ui/Pagination';
+import { Select } from '@/components/ui/Select';
+import { analytics } from '@/services/analytics/tracker';
+
+interface ShopClientProps {
+  initialProducts: Product[];
+  total: number;
+  page: number;
+  totalPages: number;
+  searchQuery: string;
+  filters: {
+    category?: string;
+    brand?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    sortBy: string;
+    minRating?: number;
+    availability: string;
+  };
+}
+
+interface CacheEntry {
+  products: Product[];
+  total: number;
+  totalPages: number;
+}
+
+export function ShopClient({
+  initialProducts,
+  total,
+  page: initialPage,
+  totalPages: initialTotalPages,
+  searchQuery,
+  filters,
+}: ShopClientProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState<number>(initialPage);
+  const [totalPages, setTotalPages] = useState<number>(initialTotalPages);
+  const [totalProducts, setTotalProducts] = useState<number>(total);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortBy, setSortBy] = useState<string>(filters.sortBy || 'default');
+  const [pageSize, setPageSize] = useState<number>(12);
+
+  const cacheRef = useRef<Record<string, CacheEntry>>({});
+  const sseRef = useRef<EventSource | null>(null);
+
+  // Track page view for analytics
+  useEffect(() => {
+    analytics.trackPageView(`/shop?${searchParams.toString()}`);
+  }, [searchParams]);
+
+  // Load view mode preference from localStorage
+  useEffect(() => {
+    const savedViewMode = localStorage.getItem('xarastore-shop-view-mode') as 'grid' | 'list';
+    if (savedViewMode) setViewMode(savedViewMode);
+
+    const savedPageSize = localStorage.getItem('xarastore-shop-page-size');
+    if (savedPageSize) setPageSize(Number(savedPageSize));
+  }, []);
+
+  // Persist view mode and page size
+  useEffect(() => {
+    localStorage.setItem('xarastore-shop-view-mode', viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    localStorage.setItem('xarastore-shop-page-size', pageSize.toString());
+  }, [pageSize]);
+
+  // Safe URL encoding
+  const buildURL = useCallback(
+    (targetPage: number) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('page', targetPage.toString());
+      params.set('pageSize', pageSize.toString());
+      params.set('sort', sortBy);
+      return `/api/shop/products?${params.toString()}`;
+    },
+    [searchParams, pageSize, sortBy]
+  );
+
+  // Client-side caching key
+  const cacheKey = (targetPage: number) =>
+    `${targetPage}|${pageSize}|${sortBy}|${searchParams.toString()}`;
+
+  // Fetch products for a specific page
+  const goToPage = useCallback(
+    async (targetPage: number) => {
+      setLoading(true);
+
+      const key = cacheKey(targetPage);
+      if (cacheRef.current[key]) {
+        // Load from cache
+        const cached = cacheRef.current[key];
+        setProducts(cached.products);
+        setTotalPages(cached.totalPages);
+        setTotalProducts(cached.total);
+        setPage(targetPage);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const url = buildURL(targetPage);
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.products) {
+          setProducts(data.products);
+          setTotalPages(data.totalPages);
+          setTotalProducts(data.total);
+          setPage(targetPage);
+          // Cache it
+          cacheRef.current[key] = {
+            products: data.products,
+            total: data.total,
+            totalPages: data.totalPages,
+          };
+        }
+      } catch (err) {
+        console.error('Error fetching products:', err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [buildURL]
+  );
+
+  // Sorting change resets to page 1
+  const handleSortChange = (newSort: string) => {
+    setSortBy(newSort);
+    goToPage(1);
+  };
+
+  // Page size change resets to page 1
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    goToPage(1);
+  };
+
+  // WebSocket / SSE for real-time stock updates
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (sseRef.current) sseRef.current.close();
+
+    const sseUrl = `/api/shop/stock-updates`; // your SSE endpoint
+    const evtSource = new EventSource(sseUrl);
+    sseRef.current = evtSource;
+
+    evtSource.onmessage = (event) => {
+      try {
+        const update = JSON.parse(event.data) as { id: string; stock: number };
+        setProducts((prev) =>
+          prev.map((p) => (p.id === update.id ? { ...p, stock: update.stock } : p))
+        );
+      } catch (err) {
+        console.error('Error parsing SSE stock update:', err);
+      }
+    };
+
+    evtSource.onerror = (err) => {
+      console.error('SSE connection error:', err);
+      evtSource.close();
+    };
+
+    return () => evtSource.close();
+  }, []);
+
+  if (!products || products.length === 0) {
+    return (
+      <EmptyState
+        title="No products found"
+        description="Try adjusting your filters or search terms."
+        icon="search"
+        action={{
+          label: 'Clear Filters',
+          href: '/shop',
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="text-sm text-gray-600">
+          Showing{' '}
+          <span className="font-semibold">{products.length}</span> of{' '}
+          <span className="font-semibold">{totalProducts.toLocaleString()}</span> products
+        </div>
+
+        <div className="flex items-center space-x-4">
+          {/* Sort */}
+          <Select
+            value={sortBy}
+            onChange={handleSortChange}
+            options={[
+              { value: 'default', label: 'Default' },
+              { value: 'price_asc', label: 'Price: Low to High' },
+              { value: 'price_desc', label: 'Price: High to Low' },
+              { value: 'rating', label: 'Rating' },
+            ]}
+            className="w-48"
+            size="sm"
+          />
+
+          {/* View Mode Toggle */}
+          <div className="hidden sm:flex items-center border border-gray-300 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 ${
+                viewMode === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              aria-label="Grid view"
+            >
+              Grid
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 ${
+                viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              aria-label="List view"
+            >
+              List
+            </button>
+          </div>
+
+          {/* Results per page */}
+          <Select
+            value={pageSize.toString()}
+            onChange={(val) => handlePageSizeChange(Number(val))}
+            options={[
+              { value: '6', label: '6 per page' },
+              { value: '12', label: '12 per page' },
+              { value: '24', label: '24 per page' },
+            ]}
+            className="w-36"
+            size="sm"
+          />
+        </div>
+      </div>
+
+      {/* Products Grid/List */}
+      {loading ? (
+        <ProductGridSkeleton count={pageSize} />
+      ) : (
+        <div
+          className={
+            viewMode === 'grid'
+              ? `grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6`
+              : 'space-y-4'
+          }
+        >
+          {products.map((product) => (
+            <div key={product.id} className={viewMode === 'list' ? 'bg-white rounded-lg border border-gray-200 p-4' : ''}>
+              <ProductCard
+                product={product}
+                layout={viewMode === 'list' ? 'horizontal' : 'vertical'}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      <div className="pt-8 border-t border-gray-200">
+        <Pagination.WithSize
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={goToPage}
+          pageSize={pageSize}
+          pageSizeOptions={[6, 12, 24]}
+          onPageSizeChange={handlePageSizeChange}
+        />
+      </div>
+    </div>
+  );
+}

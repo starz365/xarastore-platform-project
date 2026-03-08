@@ -1,10 +1,12 @@
 import { Suspense } from 'react';
 import { Metadata } from 'next';
-import { supabase } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { ShopClient } from './ShopClient';
 import { ProductGridSkeleton } from '@/components/product/ProductGridSkeleton';
 import { EmptyState } from '@/components/product/EmptyState';
 import { getCategories, getBrands, getProductCounts, getActiveFilters } from '@/lib/supabase/queries/shop';
+import { ShopFilters } from '@/components/shop/ShopFilters';
+import { ShopToolbar } from '@/components/shop/ShopToolbar';
 
 export const metadata: Metadata = {
   title: 'Shop All Products | Xarastore',
@@ -30,6 +32,9 @@ interface ShopPageProps {
 }
 
 export default async function ShopPage({ searchParams }: ShopPageProps) {
+
+  const supabase = await createClient()
+
   const params = await searchParams;
   const searchQuery = params.q || '';
   const categorySlug = params.category || '';
@@ -54,7 +59,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
       getBrands(),
       getProductCounts(),
       getActiveFilters(categorySlug, brandSlug),
-      fetchFeaturedProducts(),
+      fetchFeaturedProducts(supabase),
     ]);
 
     const categories = categoriesData.status === 'fulfilled' ? categoriesData.value : [];
@@ -92,17 +97,20 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
     };
 
     // Fetch paginated products with filters
-    const { products, total, totalPages } = await fetchProducts({
-      searchQuery,
-      categorySlug,
-      brandSlug,
-      minPrice,
-      maxPrice,
-      sortBy,
-      page,
-      minRating,
-      availability,
-    });
+    const { products, total, totalPages } = await fetchProducts(
+      supabase,
+      {
+        searchQuery,
+        categorySlug,
+        brandSlug,
+        minPrice,
+        maxPrice,
+        sortBy,
+        page,
+        minRating,
+        availability,
+      }
+    );
 
     // Generate breadcrumbs
     const breadcrumbs = generateBreadcrumbs(activeFilters.category, activeFilters.brand, searchQuery);
@@ -120,15 +128,15 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
           <div className="container-responsive py-8 md:py-12">
             <div className="max-w-3xl">
               <h1 className="text-3xl md:text-4xl font-bold mb-4">
-                {searchQuery 
-                  ? `Search Results for "${searchQuery}"` 
+                {searchQuery
+                  ? `Search Results for "${searchQuery}"`
                   : categorySlug && activeFilters.category
                     ? activeFilters.category.name
                     : 'Shop All Products'
                 }
               </h1>
               <p className="text-lg opacity-90">
-                {searchQuery 
+                {searchQuery
                   ? `Found ${total} matching products`
                   : categorySlug && activeFilters.category
                     ? activeFilters.category.description || `Browse ${total} products in ${activeFilters.category.name}`
@@ -155,9 +163,8 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
                       <span className="mx-2">/</span>
                       <a
                         href={crumb.href}
-                        className={`hover:text-red-600 transition-colors ${
-                          index === breadcrumbs.length - 1 ? 'font-semibold text-gray-900' : ''
-                        }`}
+                        className={`hover:text-red-600 transition-colors ${index === breadcrumbs.length - 1 ? 'font-semibold text-gray-900' : ''
+                          }`}
                       >
                         {crumb.label}
                       </a>
@@ -174,197 +181,28 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
           <div className="grid lg:grid-cols-4 gap-8">
             {/* Filters Sidebar */}
             <div className="lg:col-span-1">
-              <div className="sticky top-6 space-y-6">
-                {/* Mobile Filter Toggle */}
-                <div className="lg:hidden">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between p-4 bg-white border border-gray-300 rounded-lg"
-                    onClick={() => {
-                      const sidebar = document.getElementById('filters-sidebar');
-                      sidebar?.classList.toggle('hidden');
-                    }}
-                  >
-                    <span className="font-semibold">Filters & Categories</span>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                    </svg>
-                  </button>
-                </div>
-
-                {/* Filters */}
-                <div id="filters-sidebar" className="lg:block space-y-6">
-                  {/* Search */}
-                  <div className="bg-white p-4 rounded-lg border border-gray-200">
-                    <h3 className="font-semibold text-gray-900 mb-3">Search Products</h3>
-                    <form method="get" action="/shop" className="space-y-3">
-                      <input
-                        type="text"
-                        name="q"
-                        defaultValue={searchQuery}
-                        placeholder="Search products..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
-                      />
-                      <button
-                        type="submit"
-                        className="w-full py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                      >
-                        Search
-                      </button>
-                    </form>
-                  </div>
-
-                  {/* Categories */}
-                  {filterOptions.categories.length > 0 && (
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
-                      <h3 className="font-semibold text-gray-900 mb-3">Categories</h3>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {filterOptions.categories.map((category) => (
-                          <a
-                            key={category.id}
-                            href={`/shop?category=${category.slug}`}
-                            className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 ${
-                              category.isActive ? 'bg-red-50 text-red-600' : ''
-                            }`}
-                          >
-                            <span>{category.name}</span>
-                            <span className="text-sm text-gray-500">{category.count}</span>
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Brands */}
-                  {filterOptions.brands.length > 0 && (
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
-                      <h3 className="font-semibold text-gray-900 mb-3">Brands</h3>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {filterOptions.brands.map((brand) => (
-                          <a
-                            key={brand.id}
-                            href={`/shop?brand=${brand.slug}`}
-                            className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 ${
-                              brand.isActive ? 'bg-red-50 text-red-600' : ''
-                            }`}
-                          >
-                            <span>{brand.name}</span>
-                            <span className="text-sm text-gray-500">{brand.count}</span>
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Price Range */}
-                  <div className="bg-white p-4 rounded-lg border border-gray-200">
-                    <h3 className="font-semibold text-gray-900 mb-3">Price Range</h3>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-sm text-gray-600 mb-1">Min</label>
-                          <input
-                            type="number"
-                            name="min_price"
-                            defaultValue={minPrice}
-                            placeholder="KES 0"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm text-gray-600 mb-1">Max</label>
-                          <input
-                            type="number"
-                            name="max_price"
-                            defaultValue={maxPrice}
-                            placeholder="KES 100,000"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        type="submit"
-                        form="filters-form"
-                        className="w-full py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                      >
-                        Apply Price Filter
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Clear Filters */}
-                  {(searchQuery || categorySlug || brandSlug || minPrice || maxPrice || minRating || availability !== 'all') && (
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
-                      <a
-                        href="/shop"
-                        className="block w-full py-2 text-center text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                      >
-                        Clear All Filters
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <ShopFilters
+                filterOptions={filterOptions}
+                searchQuery={searchQuery}
+                minPrice={minPrice}
+                maxPrice={maxPrice}
+                categorySlug={categorySlug}
+                brandSlug={brandSlug}
+                minRating={minRating}
+                availability={availability}
+              />
             </div>
 
             {/* Products Grid */}
             <div className="lg:col-span-3">
               {/* Toolbar */}
-              <div className="bg-white p-4 rounded-lg border border-gray-200 mb-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="text-sm text-gray-600">
-                    Showing <span className="font-semibold">{((page - 1) * 24) + 1}</span>-
-                    <span className="font-semibold">{Math.min(page * 24, total)}</span> of{' '}
-                    <span className="font-semibold">{total.toLocaleString()}</span> products
-                  </div>
-                  
-                  <div className="flex items-center space-x-4">
-                    {/* Sort */}
-                    <div className="flex items-center space-x-2">
-                      <label className="text-sm text-gray-600">Sort by:</label>
-                      <select
-                        name="sort"
-                        defaultValue={sortBy}
-                        onChange={(e) => {
-                          const url = new URL(window.location.href);
-                          url.searchParams.set('sort', e.target.value);
-                          url.searchParams.delete('page');
-                          window.location.href = url.toString();
-                        }}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
-                      >
-                        {sortOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* View Toggle */}
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        className="p-2 hover:bg-gray-100 rounded-lg"
-                        aria-label="Grid view"
-                      >
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        className="p-2 hover:bg-gray-100 rounded-lg"
-                        aria-label="List view"
-                      >
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <ShopToolbar
+                page={page}
+                total={total}
+                sortBy={sortBy}
+                sortOptions={sortOptions}
+                pageSize={24}
+              />
 
               {/* Active Filters */}
               {activeFilters.category || activeFilters.brand || searchQuery || minPrice || maxPrice || minRating || availability !== 'all' ? (
@@ -452,45 +290,68 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
                   {totalPages > 1 && (
                     <div className="mt-8 flex justify-center">
                       <nav className="flex items-center space-x-2">
-                        <a
-                          href={`/shop?${buildPageQuery(page - 1)}`}
-                          className={`px-3 py-2 border rounded-lg ${
-                            page === 1
-                              ? 'border-gray-300 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                          }`}
-                          aria-disabled={page === 1}
-                        >
-                          Previous
-                        </a>
-                        
-                        {generatePaginationItems(page, totalPages).map((item, index) => (
-                          <a
-                            key={index}
-                            href={item === '...' ? '#' : `/shop?${buildPageQuery(item as number)}`}
-                            className={`px-3 py-2 border rounded-lg ${
-                              item === page
-                                ? 'border-red-600 bg-red-600 text-white'
-                                : item === '...'
-                                ? 'border-transparent'
-                                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                            }`}
-                          >
-                            {item}
-                          </a>
-                        ))}
-                        
-                        <a
-                          href={`/shop?${buildPageQuery(page + 1)}`}
-                          className={`px-3 py-2 border rounded-lg ${
-                            page === totalPages
-                              ? 'border-gray-300 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                          }`}
-                          aria-disabled={page === totalPages}
-                        >
-                          Next
-                        </a>
+                        {(() => {
+                          // Build base query params
+                          const queryParams = {
+                            q: searchQuery || undefined,
+                            category: categorySlug || undefined,
+                            brand: brandSlug || undefined,
+                            min_price: minPrice?.toString(),
+                            max_price: maxPrice?.toString(),
+                            rating: minRating?.toString(),
+                            availability: availability !== 'all' ? availability : undefined,
+                          };
+
+                          const paginationItems = generatePaginationItems(page, totalPages);
+
+                          return (
+                            <>
+                              {/* Previous */}
+                              <a
+                                href={`/shop?${buildPageQuery(queryParams, page - 1)}`}
+                                className={`px-3 py-2 border rounded-lg ${page === 1
+                                  ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                                  }`}
+                                aria-disabled={page === 1}
+                              >
+                                Previous
+                              </a>
+
+                              {/* Page numbers */}
+                              {paginationItems.map((item, index) =>
+                                item === '...' ? (
+                                  <span key={index} className="px-3 py-2">
+                                    ...
+                                  </span>
+                                ) : (
+                                  <a
+                                    key={index}
+                                    href={`/shop?${buildPageQuery(queryParams, item as number)}`}
+                                    className={`px-3 py-2 border rounded-lg ${item === page
+                                      ? 'border-red-600 bg-red-600 text-white'
+                                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                                      }`}
+                                  >
+                                    {item}
+                                  </a>
+                                )
+                              )}
+
+                              {/* Next */}
+                              <a
+                                href={`/shop?${buildPageQuery(queryParams, page + 1)}`}
+                                className={`px-3 py-2 border rounded-lg ${page === totalPages
+                                  ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                                  }`}
+                                aria-disabled={page === totalPages}
+                              >
+                                Next
+                              </a>
+                            </>
+                          );
+                        })()}
                       </nav>
                     </div>
                   )}
@@ -549,7 +410,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
 }
 
 // Helper functions
-async function fetchFeaturedProducts() {
+async function fetchFeaturedProducts(supabase: any) {
   const { data, error } = await supabase
     .from('products')
     .select('*')
@@ -562,57 +423,64 @@ async function fetchFeaturedProducts() {
   return data || [];
 }
 
-async function fetchProducts(filters: {
-  searchQuery: string;
-  categorySlug: string;
-  brandSlug: string;
-  minPrice?: number;
-  maxPrice?: number;
-  sortBy: string;
-  page: number;
-  minRating?: number;
-  availability: string;
-}) {
+async function fetchProducts(
+  supabase: any,
+  filters?: {
+    searchQuery?: string;
+    categorySlug?: string;
+    brandSlug?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    sortBy?: string;
+    page?: number;
+    minRating?: number;
+    availability?: string;
+  }
+) {
   const pageSize = 24;
-  const offset = (filters.page - 1) * pageSize;
+
+  const safeFilters = filters ?? {};
+  const page = safeFilters.page ?? 1;
+  const offset = (page - 1) * pageSize;
 
   let query = supabase
     .from('products')
-    .select('*, brand:brands(*), category:categories(*)', { count: 'exact' });
+    .select('*, brand:brands(*), category:categories(*)', { count: 'planned' });
 
   // Apply filters
-  if (filters.searchQuery) {
-    query = query.or(`name.ilike.%${filters.searchQuery}%,description.ilike.%${filters.searchQuery}%`);
+  if (safeFilters.searchQuery) {
+    const search = `%${safeFilters.searchQuery}%`;
+    query = query.or(`name.ilike.${search},description.ilike.${search}`);
   }
 
-  if (filters.categorySlug) {
-    query = query.eq('categories.slug', filters.categorySlug);
+  if (safeFilters.categorySlug) {
+    query = query.eq('categories.slug', safeFilters.categorySlug);
   }
 
-  if (filters.brandSlug) {
-    query = query.eq('brands.slug', filters.brandSlug);
+  if (safeFilters.brandSlug) {
+    query = query.eq('brands.slug', safeFilters.brandSlug);
   }
 
-  if (filters.minPrice) {
-    query = query.gte('price', filters.minPrice);
+  if (safeFilters.minPrice) {
+    query = query.gte('price', safeFilters.minPrice);
   }
 
-  if (filters.maxPrice) {
-    query = query.lte('price', filters.maxPrice);
+  if (safeFilters.maxPrice) {
+    query = query.lte('price', safeFilters.maxPrice);
   }
 
-  if (filters.minRating) {
-    query = query.gte('rating', filters.minRating);
+  if (safeFilters.minRating) {
+    query = query.gte('rating', safeFilters.minRating);
   }
 
-  if (filters.availability === 'in_stock') {
+  if (safeFilters.availability === 'in_stock') {
     query = query.gt('stock', 0);
-  } else if (filters.availability === 'out_of_stock') {
+  } else if (safeFilters.availability === 'out_of_stock') {
     query = query.eq('stock', 0);
   }
 
   // Apply sorting
-  switch (filters.sortBy) {
+  switch (safeFilters.sortBy) {
     case 'price_low':
       query = query.order('price', { ascending: true });
       break;
@@ -654,7 +522,7 @@ async function fetchProducts(filters: {
 
 function generatePriceRanges(totalProducts: number) {
   if (totalProducts === 0) return [];
-  
+
   return [
     { min: 0, max: 1000, label: 'Under KES 1,000' },
     { min: 1000, max: 5000, label: 'KES 1,000 - 5,000' },
@@ -705,49 +573,79 @@ function getSortOptions(currentSort: string) {
 function generatePaginationItems(currentPage: number, totalPages: number) {
   const items = [];
   const maxVisible = 5;
-  
+
   if (totalPages <= maxVisible) {
     for (let i = 1; i <= totalPages; i++) {
       items.push(i);
     }
   } else {
     items.push(1);
-    
+
     if (currentPage > 3) {
       items.push('...');
     }
-    
+
     const start = Math.max(2, currentPage - 1);
     const end = Math.min(totalPages - 1, currentPage + 1);
-    
+
     for (let i = start; i <= end; i++) {
       items.push(i);
     }
-    
+
     if (currentPage < totalPages - 2) {
       items.push('...');
     }
-    
+
     items.push(totalPages);
   }
-  
+
   return items;
 }
 
-function buildPageQuery(page: number) {
-  const url = new URL(window.location.href);
-  url.searchParams.set('page', page.toString());
-  return url.searchParams.toString();
+/**
+ * Safely builds a query string from given filter params and target page.
+ * Works both server-side and client-side.
+ */
+function buildPageQuery(
+  currentParams: Record<string, string | undefined>,
+  page: number
+) {
+  // Create a copy so we don't mutate the original
+  const params = new URLSearchParams();
+
+  Object.entries(currentParams).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') {
+      params.set(key, value);
+    }
+  });
+
+  // Always set the page
+  params.set('page', page.toString());
+
+  return params.toString();
 }
 
+/**
+ * Safely removes one or multiple filters from current query.
+ * Returns query string without the specified filters and resets page to 1.
+ * Works server-side and client-side.
+ */
 function removeFilterFromQuery(filterNames: string | string[]) {
-  const url = new URL(window.location.href);
+  // Determine current query params in a server-safe way
+  let params: URLSearchParams;
+
+  try {
+    params = new URLSearchParams(window.location.search);
+  } catch {
+    // fallback: empty params if window not available (SSR)
+    params = new URLSearchParams();
+  }
+
   const names = Array.isArray(filterNames) ? filterNames : [filterNames];
-  
-  names.forEach(name => {
-    url.searchParams.delete(name);
-  });
-  url.searchParams.delete('page');
-  
-  return url.searchParams.toString();
+  names.forEach(name => params.delete(name));
+
+  // Reset page whenever a filter is removed
+  params.set('page', '1');
+
+  return params.toString();
 }

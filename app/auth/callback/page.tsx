@@ -11,13 +11,18 @@ export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('');
+  const [countdown, setCountdown] = useState(3);
 
+  // Only access window/hash client-side
   useEffect(() => {
-    handleAuthCallback();
+    if (typeof window !== 'undefined') {
+      handleAuthCallback();
+    }
   }, []);
 
   const handleAuthCallback = async () => {
     try {
+      // Safely parse the hash from URL
       const hash = window.location.hash;
       const params = new URLSearchParams(hash.substring(1));
       const accessToken = params.get('access_token');
@@ -25,75 +30,70 @@ export default function AuthCallbackPage() {
       const error = params.get('error');
       const errorDescription = params.get('error_description');
 
-      if (error) {
-        throw new Error(errorDescription || error);
-      }
+      if (error) throw new Error(errorDescription || error);
+      if (!accessToken || !refreshToken) throw new Error('Missing authentication tokens');
 
-      if (!accessToken || !refreshToken) {
-        throw new Error('Missing authentication tokens');
-      }
-
-      // Set the session manually
+      // Set session
       const { error: sessionError } = await supabase.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
       });
-
       if (sessionError) throw sessionError;
 
-      // Get the current session
+      // Get current session
       const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Failed to establish session');
 
-      if (!session) {
-        throw new Error('Failed to establish session');
-      }
-
-      // Check if user exists in our database
+      // Upsert user in database
       const { data: existingUser } = await supabase
         .from('users')
         .select('id')
         .eq('id', session.user.id)
         .single();
 
+      const emailVerified = !!session.user.email_confirmed_at;
+
       if (!existingUser) {
-        // Create user profile if it doesn't exist
         await supabase.from('users').insert({
           id: session.user.id,
           email: session.user.email,
           full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
           avatar_url: session.user.user_metadata?.avatar_url || 
             `https://ui-avatars.com/api/?name=${encodeURIComponent(session.user.email?.split('@')[0] || 'User')}&background=dc2626&color=fff`,
-          email_verified: session.user.email_confirmed_at !== null,
+          email_verified: emailVerified,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
       } else {
-        // Update user email verification status
-        await supabase
-          .from('users')
-          .update({
-            email_verified: session.user.email_confirmed_at !== null,
-            updated_at: new Date().toISOString(),
-          })
+        await supabase.from('users')
+          .update({ email_verified: emailVerified, updated_at: new Date().toISOString() })
           .eq('id', session.user.id);
       }
 
       setStatus('success');
       setMessage('Authentication successful! Redirecting...');
 
-      // Get redirect URL from localStorage or default to home
-      const redirectTo = localStorage.getItem('redirectAfterAuth') || '/';
-      localStorage.removeItem('redirectAfterAuth');
+      // Secure redirect using sessionStorage
+      const redirectTo = sessionStorage.getItem('redirectAfterAuth') || '/';
+      sessionStorage.removeItem('redirectAfterAuth');
 
-      // Delay redirect to show success message
-      setTimeout(() => {
-        router.push(redirectTo);
-      }, 2000);
+      const safeRedirect = redirectTo.startsWith('/') ? redirectTo : '/';
 
-    } catch (error: any) {
-      console.error('Auth callback error:', error);
+      // Start countdown redirect
+      const interval = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            router.push(safeRedirect);
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+    } catch (err: any) {
+      console.error('Auth callback error:', err);
       setStatus('error');
-      setMessage(error.message || 'Authentication failed');
+      setMessage(err.message || 'Authentication failed');
     }
   };
 
@@ -137,16 +137,12 @@ export default function AuthCallbackPage() {
               {statusContent.icon}
             </div>
           </div>
-          
+
           <h1 className={`text-3xl font-bold ${statusContent.color} mb-4`}>
             {statusContent.title}
           </h1>
-          
-          <p className="text-gray-600 mb-8">
-            {statusContent.description}
-          </p>
+          <p className="text-gray-600 mb-8">{statusContent.description}</p>
 
-          {/* Security Info */}
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-8">
             <div className="flex items-center justify-center space-x-2 mb-3">
               <Shield className="w-5 h-5 text-green-600" />
@@ -157,7 +153,6 @@ export default function AuthCallbackPage() {
             </p>
           </div>
 
-          {/* Loading Progress */}
           {status === 'loading' && (
             <div className="space-y-4">
               <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -180,49 +175,30 @@ export default function AuthCallbackPage() {
             </div>
           )}
 
-          {/* Error Actions */}
           {status === 'error' && (
             <div className="space-y-4">
-              <Button
-                variant="primary"
-                className="w-full"
-                onClick={() => router.push('/auth/login')}
-              >
-                Try Again
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full"
-                onClick={() => router.push('/')}
-              >
-                Go to Homepage
-              </Button>
+              <Button variant="primary" className="w-full" onClick={() => router.push('/auth/login')}>Try Again</Button>
+              <Button variant="secondary" className="w-full" onClick={() => router.push('/')}>Go to Homepage</Button>
               <div className="text-center">
-                <a
-                  href="mailto:support@xarastore.com"
-                  className="text-sm text-red-600 hover:text-red-800"
-                >
+                <a href="mailto:support@xarastore.com" className="text-sm text-red-600 hover:text-red-800">
                   Contact Support
                 </a>
               </div>
             </div>
           )}
 
-          {/* Success Countdown */}
           {status === 'success' && (
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mb-4">
-                <div className="text-xl font-bold text-red-600">3</div>
+                <div className="text-xl font-bold text-red-600">{countdown}</div>
               </div>
-              <p className="text-sm text-gray-600">
-                Redirecting in 3 seconds...
-              </p>
+              <p className="text-sm text-gray-600">Redirecting in {countdown} seconds...</p>
             </div>
           )}
         </div>
 
-        {/* Debug Info (Development only) */}
-        {process.env.NODE_ENV === 'development' && (
+        {/* Development debug info */}
+        {process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && (
           <div className="mt-8 p-4 bg-gray-900 text-gray-100 rounded-lg text-xs">
             <div className="font-mono space-y-1">
               <div>Hash: {window.location.hash.substring(0, 50)}...</div>

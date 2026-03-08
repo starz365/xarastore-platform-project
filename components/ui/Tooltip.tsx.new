@@ -1,0 +1,162 @@
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { cn } from '@/lib/utils/css';
+
+interface TooltipProps {
+  children: React.ReactNode;
+  content: React.ReactNode;
+  position?: 'top' | 'bottom' | 'left' | 'right';
+  delay?: number;
+  className?: string;
+  contentClassName?: string;
+}
+
+export function Tooltip({
+  children,
+  content,
+  position = 'top',
+  delay = 200,
+  className,
+  contentClassName,
+}: TooltipProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const timeoutRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => {
+    const updatePosition = () => {
+      if (!triggerRef.current || !isVisible) return;
+
+      const rect = triggerRef.current.getBoundingClientRect();
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+
+      let top = 0;
+      let left = 0;
+
+      switch (position) {
+        case 'top':
+          top = rect.top + scrollY - 8;
+          left = rect.left + scrollX + rect.width / 2;
+          break;
+        case 'bottom':
+          top = rect.bottom + scrollY + 8;
+          left = rect.left + scrollX + rect.width / 2;
+          break;
+        case 'left':
+          top = rect.top + scrollY + rect.height / 2;
+          left = rect.left + scrollX - 8;
+          break;
+        case 'right':
+          top = rect.top + scrollY + rect.height / 2;
+          left = rect.right + scrollX + 8;
+          break;
+      }
+
+      setCoords({ top, left });
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isVisible, position]);
+
+  const handleMouseEnter = () => {
+    timeoutRef.current = setTimeout(() => {
+      setIsVisible(true);
+    }, delay);
+  };
+
+  const handleMouseLeave = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    setIsVisible(false);
+  };
+
+  const getTransformOrigin = () => {
+    switch (position) {
+      case 'top': return 'bottom';
+      case 'bottom': return 'top';
+      case 'left': return 'right';
+      case 'right': return 'left';
+      default: return 'bottom';
+    }
+  };
+
+  const getArrowPosition = () => {
+    const arrowSize = 6;
+    switch (position) {
+      case 'top':
+        return { bottom: -arrowSize, left: '50%', transform: 'translateX(-50%)' };
+      case 'bottom':
+        return { top: -arrowSize, left: '50%', transform: 'translateX(-50%)' };
+      case 'left':
+        return { right: -arrowSize, top: '50%', transform: 'translateY(-50%)' };
+      case 'right':
+        return { left: -arrowSize, top: '50%', transform: 'translateY(-50%)' };
+      default:
+        return { bottom: -arrowSize, left: '50%', transform: 'translateX(-50%)' };
+    }
+  };
+
+  return (
+    <>
+      <div
+        ref={triggerRef}
+        className={cn('inline-block', className)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onFocus={handleMouseEnter}
+        onBlur={handleMouseLeave}
+      >
+        {children}
+      </div>
+
+      {isVisible && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{
+            top: coords.top,
+            left: coords.left,
+            transform: `translate(-50%, ${position === 'top' ? '-100%' : position === 'bottom' ? '0' : '-50%'})`,
+          }}
+        >
+          <div
+            className={cn(
+              'relative px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg whitespace-nowrap',
+              'animate-in fade-in slide-in-from-bottom-1',
+              contentClassName
+            )}
+            style={{
+              transformOrigin: getTransformOrigin(),
+            }}
+          >
+            {content}
+            <div
+              className="absolute w-0 h-0 border-solid"
+              style={{
+                ...getArrowPosition(),
+                borderWidth: '6px',
+                borderColor: 'transparent',
+                borderTopColor: position === 'bottom' ? '#111827' : 'transparent',
+                borderBottomColor: position === 'top' ? '#111827' : 'transparent',
+                borderLeftColor: position === 'right' ? '#111827' : 'transparent',
+                borderRightColor: position === 'left' ? '#111827' : 'transparent',
+              }}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}

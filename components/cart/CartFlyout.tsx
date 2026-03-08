@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useCart } from '@/lib/hooks/useCart';
@@ -19,7 +19,18 @@ export function CartFlyout({ isOpen, onClose }: CartFlyoutProps) {
   const router = useRouter();
   const { items, getTotal, getItemCount } = useCart();
   const { format, isLoading: currencyLoading } = useCurrency();
+  const [mounted, setMounted] = useState(false);
 
+  // --------------------------
+  // Hydration Safe Rendering
+  // --------------------------
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // --------------------------
+  // Escape Key & Body Scroll Lock
+  // --------------------------
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -36,17 +47,17 @@ export function CartFlyout({ isOpen, onClose }: CartFlyoutProps) {
     };
   }, [isOpen, onClose]);
 
-  const handleCheckout = () => {
+  const handleCheckout = useCallback(() => {
     onClose();
     router.push('/checkout');
-  };
+  }, [onClose, router]);
 
-  const handleViewCart = () => {
+  const handleViewCart = useCallback(() => {
     onClose();
     router.push('/cart');
-  };
+  }, [onClose, router]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const itemCount = getItemCount();
   const subtotal = getTotal();

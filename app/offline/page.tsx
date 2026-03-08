@@ -29,7 +29,7 @@ export default function OfflinePage() {
               <WifiOff className="w-10 h-10 text-gray-600" />
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              You're offline
+              You're currently offline!
             </h1>
             <p className="text-gray-600 text-lg">
               Don't worry! You can still browse products you've recently viewed.

@@ -1,5 +1,5 @@
 import { headers } from 'next/headers';
-import { supabase } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/supabase/auth';
 
 export async function getRouteInfo() {
@@ -8,6 +8,9 @@ export async function getRouteInfo() {
   const searchParams = headersList.get('x-invoke-query') || '';
   const userAgent = headersList.get('user-agent') || '';
   const connection = headersList.get('connection') || '';
+
+
+  const supabase = await createClient();
   
   // Extract route segments
   const segments = pathname.split('/').filter(Boolean);
