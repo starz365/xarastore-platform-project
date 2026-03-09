@@ -1,42 +1,55 @@
-import { NextResponse } from 'next/server';
-import { UAParser } from 'ua-parser-js';
-import { withAuth, createClient } from '@/lib/supabase/server';
+import { NextResponse } from 'next/server'
+import { UAParser } from 'ua-parser-js'
+//import { withAuth } from '@/lib/auth/withAuth'
+import { withAuth, createClient } from '@/lib/supabase/server'
 
 export const GET = withAuth(async (session) => {
-  const supabase = await createClient();
+  const supabase = await createClient()
 
   const { data: sessions, error } = await supabase
     .from('user_sessions')
     .select('*')
     .eq('user_id', session.user.id)
-    .order('last_active_at', { ascending: false });
+    .order('last_active_at', { ascending: false })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    )
   }
 
   const formattedSessions = sessions.map((s) => {
-    const parser = new UAParser(s.user_agent);
-    const device = parser.getDevice();
-    const browser = parser.getBrowser();
-    const os = parser.getOS();
+    const parser = new UAParser(s.user_agent)
+
+    const device = parser.getDevice()
+    const browser = parser.getBrowser()
+    const os = parser.getOS()
 
     return {
       id: s.id,
+
       device:
         device.type === 'mobile'
           ? 'Mobile'
           : device.type === 'tablet'
           ? 'Tablet'
           : 'Desktop',
-      browser: browser.name || 'Unknown',
-      os: os.name || 'Unknown',
-      ip: s.ip_address,
-      location: s.location || 'Unknown',
-      lastActive: s.last_active_at || s.created_at,
-      isCurrent: s.id === session.access_token,
-    };
-  });
 
-  return NextResponse.json(formattedSessions);
-});
+      browser: browser.name || 'Unknown',
+
+      os: os.name || 'Unknown',
+
+      ip: s.ip_address,
+
+      location: s.location || 'Unknown',
+
+      lastActive: s.last_active_at || s.created_at,
+
+      // IMPORTANT FIX
+      isCurrent: s.id === session.access_token,
+    }
+  })
+
+  return NextResponse.json(formattedSessions)
+})

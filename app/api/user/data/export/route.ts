@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import JSZip from 'jszip';
 import { format } from 'date-fns';
+
+const supabase = createClient();
 
 export async function GET(request: NextRequest) {
   try {

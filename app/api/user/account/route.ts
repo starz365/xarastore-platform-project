@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 
 export async function DELETE(request: NextRequest) {
   try {
-    const cookieStore = cookies();
+	const supabase = await createClient();
+    const cookieStore = await cookies();
     const token = cookieStore.get('sb-access-token');
 
     if (!token) {

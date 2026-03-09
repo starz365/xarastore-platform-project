@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
+
+const supabase = createClient();
 
 const passwordChangeSchema = z.object({
   currentPassword: z.string().min(1),

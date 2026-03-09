@@ -1,18 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { ratelimit } from '@/lib/redis/ratelimit';
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { ratelimit } from '@/lib/redis/ratelimit'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/supabase'
 
-
-const supabase = createClient();
+/* ------------------------------------------------ */
+/* POST /api/analytics */
+/* ------------------------------------------------ */
 
 export async function POST(request: NextRequest) {
+  const supabase = createClient()
+
   try {
-    // Rate limiting
     const ip =
-      request.headers.get('x-forwarded-for')?.split(',')[0] ||
-      request.headers.get('x-real-ip') ||
-      'unknown';
-    const { success, limit, reset, remaining } = await ratelimit.analytics(ip);
+      request.headers.get('x-forwarded-for')?.split(',')[0] ??
+      request.headers.get('x-real-ip') ??
+      'unknown'
+
+    const { success, limit, reset, remaining } = await ratelimit.analytics(ip)
 
     if (!success) {
       return NextResponse.json(
@@ -20,195 +25,212 @@ export async function POST(request: NextRequest) {
         {
           status: 429,
           headers: {
-            'X-RateLimit-Limit': limit.toString(),
-            'X-RateLimit-Remaining': remaining.toString(),
-            'X-RateLimit-Reset': reset.toString(),
+            'X-RateLimit-Limit': String(limit),
+            'X-RateLimit-Remaining': String(remaining),
+            'X-RateLimit-Reset': String(reset)
           }
         }
-      );
+      )
     }
 
-    const body = await request.json();
-    const { type, data, sessionId, userId } = body;
+    const body = await request.json()
+    const { type, data, sessionId, userId } = body ?? {}
 
-    // Validate request
     if (!type || !data) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
-      );
+      )
     }
 
-    // Sanitize and validate data
-    const sanitizedData = sanitizeAnalyticsData(data);
-    const timestamp = new Date().toISOString();
-    const userAgent = request.headers.get('user-agent') || 'unknown';
-    const referrer = request.headers.get('referer') || 'direct';
-    const ipAddress = request.headers.get('x-forwarded-for') || request.ip || 'unknown';
+    const sanitizedData = sanitizeAnalyticsData(data)
 
-
-    // Prepare analytics record
     const analyticsRecord = {
       type,
       data: sanitizedData,
-      session_id: sessionId,
-      user_id: userId,
-      user_agent: userAgent.substring(0, 500),
-      referrer: referrer.substring(0, 500),
-      ip_address: ipAddress.substring(0, 100),
-      created_at: timestamp,
-    };
+      session_id: sessionId ?? null,
+      user_id: userId ?? null,
+      user_agent: (request.headers.get('user-agent') ?? 'unknown').slice(0, 500),
+      referrer: (request.headers.get('referer') ?? 'direct').slice(0, 500),
+      ip_address: ip.slice(0, 100),
+      created_at: new Date().toISOString()
+    }
 
-    // Insert into analytics table
-    const { error: insertError } = await supabase
+    const { error } = await supabase
       .from('analytics_events')
-      .insert(analyticsRecord);
+      .insert(analyticsRecord)
 
-    if (insertError) {
-      console.error('Analytics insert error:', insertError);
-      throw insertError;
-    }
+    if (error) throw error
 
-    // Process real-time analytics if needed
     if (type === 'pageview' || type === 'event') {
-      await processRealTimeAnalytics(type, sanitizedData, userId);
+      await processRealTimeAnalytics(supabase, type, sanitizedData, userId)
     }
 
-    // If it's an ecommerce event, update product/category analytics
     if (sanitizedData?.category === 'ecommerce') {
-      await processEcommerceAnalytics(sanitizedData);
+      await processEcommerceAnalytics(supabase, sanitizedData)
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('Analytics API error:', error);
+    console.error('Analytics API error:', error)
 
-    // Log error but don't fail the request
     try {
       await supabase.from('analytics_errors').insert({
-        error: error?.message || 'unknown error',
+        error: error?.message ?? 'unknown error',
         endpoint: '/api/analytics',
-        created_at: new Date().toISOString(),
-      });
-    } catch (logError) {
-      console.error('Failed to log analytics error', logError);
+        created_at: new Date().toISOString()
+      })
+    } catch (loggingError) {
+      console.error('Failed to log analytics error', loggingError)
     }
 
     return NextResponse.json(
       { success: false, error: 'Analytics processing failed' },
       { status: 500 }
-    );
+    )
   }
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const startDate = searchParams.get('start_date') || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const endDate = searchParams.get('end_date') || new Date().toISOString();
-    const metrics = searchParams.get('metrics')?.split(',') || ['pageviews', 'sessions', 'conversions'];
+/* ------------------------------------------------ */
+/* GET /api/analytics */
+/* ------------------------------------------------ */
 
-    // Get aggregated analytics data
-    const analyticsData = await getAggregatedAnalytics(startDate, endDate, metrics);
+export async function GET(request: NextRequest) {
+  const supabase = createClient()
+
+  try {
+    const { searchParams } = new URL(request.url)
+
+    const startDate =
+      searchParams.get('start_date') ??
+      new Date(Date.now() - 30 * 86400000).toISOString()
+
+    const endDate =
+      searchParams.get('end_date') ??
+      new Date().toISOString()
+
+    const metrics =
+      searchParams.get('metrics')?.split(',') ??
+      ['pageviews', 'sessions', 'conversions']
+
+    const analyticsData = await getAggregatedAnalytics(
+      supabase,
+      startDate,
+      endDate,
+      metrics
+    )
 
     return NextResponse.json({
       success: true,
       data: analyticsData,
-      timeframe: { startDate, endDate },
-    });
+      timeframe: { startDate, endDate }
+    })
   } catch (error: any) {
-    console.error('Analytics GET error:', error);
+    console.error('Analytics GET error:', error)
+
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
-    );
+    )
   }
 }
 
-function sanitizeAnalyticsData(data: any): any {
-  // Remove any sensitive information
-  const sanitized = { ...data };
+/* ------------------------------------------------ */
+/* Sanitization */
+/* ------------------------------------------------ */
 
-  // Remove potential PII
-  delete sanitized.email;
-  delete sanitized.phone;
-  delete sanitized.password;
-  delete sanitized.credit_card;
-  delete sanitized.token;
-  delete sanitized.api_key;
+function sanitizeAnalyticsData(data: any) {
+  const sanitized = { ...data }
 
-  // Truncate long strings
-  Object.keys(sanitized).forEach(key => {
+  delete sanitized.email
+  delete sanitized.phone
+  delete sanitized.password
+  delete sanitized.credit_card
+  delete sanitized.token
+  delete sanitized.api_key
+
+  for (const key of Object.keys(sanitized)) {
     if (typeof sanitized[key] === 'string' && sanitized[key].length > 1000) {
-      sanitized[key] = sanitized[key].substring(0, 1000);
+      sanitized[key] = sanitized[key].slice(0, 1000)
     }
-  });
+  }
 
-  return sanitized;
+  return sanitized
 }
 
-async function processRealTimeAnalytics(type: string, data: any, userId?: string) {
+/* ------------------------------------------------ */
+/* Real-time analytics */
+/* ------------------------------------------------ */
+
+async function processRealTimeAnalytics(
+  supabase: SupabaseClient<Database>,
+  type: string,
+  data: any,
+  userId?: string
+) {
   try {
-    const timestamp = new Date().toISOString();
-    const hourKey = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
+    const timestamp = new Date().toISOString()
+    const hourKey = new Date().toISOString().slice(0, 13)
 
-    // Update hourly counters
-    const updateData: any = {
+    const updateData: Record<string, any> = {
       [`${type}_count`]: 1,
-      updated_at: timestamp,
-    };
-
-    if (userId) {
-      updateData.unique_users = 1;
+      updated_at: timestamp
     }
 
-    // Use upsert to create or update hourly aggregation
-    await supabase
-      .from('analytics_hourly')
-      .upsert({
+    if (userId) updateData.unique_users = 1
+
+    await supabase.from('analytics_hourly').upsert(
+      {
         hour: hourKey,
-        ...updateData,
-      }, {
-        onConflict: 'hour',
-        ignoreDuplicates: false,
-      });
+        ...updateData
+      },
+      { onConflict: 'hour' }
+    )
   } catch (error) {
-    console.error('Real-time analytics error:', error);
+    console.error('Real-time analytics error:', error)
   }
 }
 
-async function processEcommerceAnalytics(data: any) {
+/* ------------------------------------------------ */
+/* Ecommerce analytics */
+/* ------------------------------------------------ */
+
+async function processEcommerceAnalytics(
+  supabase: SupabaseClient<Database>,
+  data: any
+) {
   try {
-    const { action, product_id, category_id, value } = data;
+    const { action, product_id, value } = data
 
     if (action === 'product_view' && product_id) {
-      // Update product view count
       await supabase.rpc('increment_product_views', {
-        product_id_param: product_id,
-      });
+        product_id_param: product_id
+      })
     }
 
     if (action === 'add_to_cart' && product_id) {
-      // Update product cart addition count
       await supabase.rpc('increment_cart_additions', {
-        product_id_param: product_id,
-      });
+        product_id_param: product_id
+      })
     }
 
     if (action === 'purchase' && product_id) {
-      // Update product purchase count
       await supabase.rpc('increment_product_purchases', {
         product_id_param: product_id,
-        amount_param: value || 0,
-      });
+        amount_param: value ?? 0
+      })
     }
   } catch (error) {
-    console.error('Ecommerce analytics error:', error);
+    console.error('Ecommerce analytics error:', error)
   }
 }
 
+/* ------------------------------------------------ */
+/* Aggregated analytics */
+/* ------------------------------------------------ */
 
 async function getAggregatedAnalytics(
+  supabase: SupabaseClient<Database>,
   startDate: string,
   endDate: string,
   metrics: string[]
@@ -216,180 +238,57 @@ async function getAggregatedAnalytics(
   try {
     const { data, error } = await supabase.rpc('get_analytics_aggregates', {
       start_date_param: startDate,
-      end_date_param: endDate,
-    });
+      end_date_param: endDate
+    })
 
-    if (error) {
-      console.error('Analytics aggregate RPC error:', error);
-      throw error;
-    }
+    if (error) throw error
 
     const result = data?.[0] ?? {
       pageviews: 0,
       sessions: 0,
       conversions: 0,
-      revenue: 0,
-    };
+      revenue: 0
+    }
 
-    const response: Record<string, any> = {};
+    const response: Record<string, any> = {}
 
     for (const metric of metrics) {
       switch (metric) {
         case 'pageviews':
-          response.pageviews = {
-            metric: 'pageviews',
-            value: result.pageviews ?? 0,
-          };
-          break;
+          response.pageviews = { metric, value: result.pageviews ?? 0 }
+          break
 
         case 'sessions':
-          response.sessions = {
-            metric: 'sessions',
-            value: result.sessions ?? 0,
-          };
-          break;
+          response.sessions = { metric, value: result.sessions ?? 0 }
+          break
 
         case 'conversions':
-          response.conversions = {
-            metric: 'conversions',
-            value: result.conversions ?? 0,
-          };
-          break;
+          response.conversions = { metric, value: result.conversions ?? 0 }
+          break
 
         case 'revenue':
           response.revenue = {
-            metric: 'revenue',
+            metric,
             value: result.revenue ?? 0,
-            currency: 'KES',
-          };
-          break;
+            currency: 'KES'
+          }
+          break
 
         default:
-          response[metric] = {
-            metric,
-            value: 0,
-          };
+          response[metric] = { metric, value: 0 }
       }
     }
 
-    return response;
-  } catch (err) {
-    console.error('Analytics aggregation error:', err);
+    return response
+  } catch (error) {
+    console.error('Analytics aggregation error:', error)
 
-    const fallback: Record<string, any> = {};
+    const fallback: Record<string, any> = {}
 
     for (const metric of metrics) {
-      fallback[metric] = { metric, value: 0 };
+      fallback[metric] = { metric, value: 0 }
     }
 
-    return fallback;
+    return fallback
   }
 }
-
-/*
-async function getAggregatedAnalytics(
-  startDate: string,
-  endDate: string,
-  metrics: string[]
-) {
-  const queries = metrics.map(async (metric) => {
-    try {
-      switch (metric) {
-        case 'pageviews': {
-          const { count, error } = await supabase
-            .from('analytics_events')
-            .select('*', { count: 'exact', head: true })
-            .eq('type', 'pageview')
-            .gte('created_at', startDate)
-            .lte('created_at', endDate);
-
-          if (error) {
-            console.error('Pageviews query error:', error);
-            return { metric: 'pageviews', value: 0 };
-          }
-
-          return { metric: 'pageviews', value: count ?? 0 };
-        }
-
-        case 'sessions': {
-          const { data, error } = await supabase
-            .from('analytics_events')
-            .select('session_id', { distinct: true })
-            .not('session_id', 'is', null)
-            .gte('created_at', startDate)
-            .lte('created_at', endDate);
-
-          if (error) {
-            console.error('Sessions query error:', error);
-            return { metric: 'sessions', value: 0 };
-          }
-
-          return {
-            metric: 'sessions',
-            value: data?.length ?? 0,
-          };
-        }
-
-        case 'conversions': {
-          const { count, error } = await supabase
-            .from('analytics_events')
-            .select('*', { count: 'exact', head: true })
-            .eq('data->>action', 'purchase')
-            .gte('created_at', startDate)
-            .lte('created_at', endDate);
-
-          if (error) {
-            console.error('Conversions query error:', error);
-            return { metric: 'conversions', value: 0 };
-          }
-
-          return { metric: 'conversions', value: count ?? 0 };
-        }
-
-        case 'revenue': {
-          const { data, error } = await supabase
-            .from('analytics_events')
-            .select('data')
-            .eq('data->>action', 'purchase')
-            .gte('created_at', startDate)
-            .lte('created_at', endDate);
-
-          if (error) {
-            console.error('Revenue query error:', error);
-            return { metric: 'revenue', value: 0, currency: 'KES' };
-          }
-
-          const totalRevenue =
-            data?.reduce((sum: number, event: any) => {
-              const value =
-                typeof event?.data?.value === 'number'
-                  ? event.data.value
-                  : parseFloat(event?.data?.value) || 0;
-
-              return sum + value;
-            }, 0) ?? 0;
-
-          return {
-            metric: 'revenue',
-            value: totalRevenue,
-            currency: 'KES',
-          };
-        }
-
-        default:
-          return { metric, value: 0 };
-      }
-    } catch (err) {
-      console.error(`Analytics metric error (${metric}):`, err);
-      return { metric, value: 0 };
-    }
-  });
-
-  const results = await Promise.all(queries);
-
-  return results.reduce((acc, curr) => {
-    acc[curr.metric] = curr;
-    return acc;
-  }, {} as Record<string, any>);
-}
-*/

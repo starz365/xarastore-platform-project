@@ -1,204 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
+import { z } from 'zod';
 import { cookies } from 'next/headers';
-import { randomBytes, createHash } from 'crypto';
+
+const profileUpdateSchema = z.object({
+  fullName: z.string().min(2).max(100).optional(),
+  email: z.string().email().optional(),
+});
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const token = cookieStore.get('sb-access-token');
+    const supabase = await createClient();
+    const cookieStore = await cookies();
 
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token.value);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Get API keys
-    const { data: keys, error: keysError } = await supabase
-      .from('api_keys')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (keysError) {
-      console.error('API keys fetch error:', keysError);
-      return NextResponse.json(
-        { error: 'Failed to fetch API keys' },
-        { status: 500 }
-      );
-    }
-
-    // Mask keys
-    const maskedKeys = keys.map(key => ({
-      id: key.id,
-      name: key.name,
-      prefix: key.key.substring(0, 8),
-      createdAt: key.created_at,
-      lastUsed: key.last_used_at,
-      expiresAt: key.expires_at,
-    }));
-
-    return NextResponse.json(maskedKeys);
-  } catch (error: any) {
-    console.error('API keys API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const cookieStore = cookies();
-    const token = cookieStore.get('sb-access-token');
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token.value);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const body = await request.json();
-    const { name } = body;
-
-    // Generate API key
-    const apiKey = `xa_${randomBytes(32).toString('hex')}`;
-    
-    // Hash the key for storage (never store raw key)
-    const hashedKey = createHash('sha256').update(apiKey).digest('hex');
-
-    // Store key in database
-    const { data: keyRecord, error: insertError } = await supabase
-      .from('api_keys')
-      .insert({
-        user_id: user.id,
-        name: name || 'API Key',
-        key: hashedKey,
-        prefix: apiKey.substring(0, 8),
-        created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year
-      })
-      .select()
+    const { data: profile, error: profileError } = await supabase
+      .from('users')
+      .select('id,email,full_name,avatar_url,role,email_verified,two_factor_enabled,created_at,last_login_at,last_login_ip,last_login_user_agent')
+      .eq('id', user.id)
       .single();
 
-    if (insertError) {
-      console.error('API key insert error:', insertError);
-      return NextResponse.json(
-        { error: 'Failed to create API key' },
-        { status: 500 }
-      );
-    }
+    if (profileError) return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
 
-    // Log security event
-    await supabase.from('security_events').insert({
-      user_id: user.id,
-      event_type: 'api_key_created',
-      ip_address: request.headers.get('x-forwarded-for') || request.ip,
-      user_agent: request.headers.get('user-agent'),
-    });
+    const { data: sessions } = await supabase
+      .from('user_sessions')
+      .select('created_at,ip_address,user_agent')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const lastSession = sessions?.[0];
 
     return NextResponse.json({
-      id: keyRecord.id,
-      key: apiKey, // Only returned once
-      name: keyRecord.name,
-      prefix: keyRecord.prefix,
-      createdAt: keyRecord.created_at,
-      expiresAt: keyRecord.expires_at,
+      id: profile.id,
+      email: profile.email,
+      fullName: profile.full_name,
+      avatarUrl: profile.avatar_url,
+      role: profile.role,
+      emailVerified: profile.email_verified,
+      twoFactorEnabled: profile.two_factor_enabled,
+      createdAt: profile.created_at,
+      lastLoginAt: lastSession?.created_at || profile.last_login_at,
+      lastLoginIp: lastSession?.ip_address || profile.last_login_ip,
+      lastLoginUserAgent: lastSession?.user_agent || profile.last_login_user_agent,
     });
   } catch (error: any) {
-    console.error('API key creation error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Profile GET error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-export async function DELETE(request: NextRequest) {
+export async function PUT(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const token = cookieStore.get('sb-access-token');
+    const supabase = await createClient();
+    const cookieStore = await cookies();
 
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const formData = await request.formData();
+    const fullName = formData.get('fullName') as string;
+    const email = formData.get('email') as string;
+    const avatar = formData.get('avatar') as File | null;
+
+    const validation = profileUpdateSchema.safeParse({ fullName, email });
+    if (!validation.success) return NextResponse.json({ errors: validation.error.flatten().fieldErrors }, { status: 400 });
+
+    let avatarUrl: string | null = null;
+    if (avatar && avatar.size > 0) {
+      const fileExt = avatar.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+      const { error: uploadError } = await supabase.storage.from('user-content').upload(filePath, avatar, { cacheControl: '3600', upsert: false });
+      if (uploadError) return NextResponse.json({ error: 'Failed to upload avatar' }, { status: 500 });
+
+      const { data: { publicUrl } } = supabase.storage.from('user-content').getPublicUrl(filePath);
+      avatarUrl = publicUrl;
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token.value);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    if (email && email !== user.email) {
+      const { error: updateError } = await supabase.auth.updateUser({ email });
+      if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 });
     }
 
-    const url = new URL(request.url);
-    const keyId = url.pathname.split('/').pop();
+    const updates: any = {};
+    if (fullName) updates.full_name = fullName;
+    if (avatarUrl) updates.avatar_url = avatarUrl;
 
-    if (!keyId) {
-      return NextResponse.json(
-        { error: 'Key ID is required' },
-        { status: 400 }
-      );
+    if (Object.keys(updates).length > 0) {
+      const { error: updateError } = await supabase.from('users').update(updates).eq('id', user.id);
+      if (updateError) return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
     }
 
-    // Delete key
-    const { error: deleteError } = await supabase
-      .from('api_keys')
-      .delete()
-      .eq('id', keyId)
-      .eq('user_id', user.id);
-
-    if (deleteError) {
-      console.error('API key delete error:', deleteError);
-      return NextResponse.json(
-        { error: 'Failed to revoke API key' },
-        { status: 500 }
-      );
-    }
-
-    // Log security event
-    await supabase.from('security_events').insert({
-      user_id: user.id,
-      event_type: 'api_key_revoked',
-      ip_address: request.headers.get('x-forwarded-for') || request.ip,
-      user_agent: request.headers.get('user-agent'),
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: 'API key revoked successfully',
-    });
+    const { data: profile } = await supabase.from('users').select('*').eq('id', user.id).single();
+    return NextResponse.json({ success: true, user: { id: profile.id, email: profile.email, fullName: profile.full_name, avatarUrl: profile.avatar_url, role: profile.role, emailVerified: profile.email_verified, twoFactorEnabled: profile.two_factor_enabled, createdAt: profile.created_at } });
   } catch (error: any) {
-    console.error('API key revocation error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Profile PUT error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

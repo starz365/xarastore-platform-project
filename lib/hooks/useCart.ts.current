@@ -25,6 +25,7 @@ export const useCart = create<CartStore>()(
       isSyncing: false,
 
       addItem: async (productId, variant, quantity) => {
+        // Validate inputs
         if (!productId || !variant || quantity < 1) {
           throw new Error('Invalid parameters for add to cart');
         }
@@ -35,6 +36,7 @@ export const useCart = create<CartStore>()(
           );
 
           if (existingItem) {
+            // Check if new quantity would exceed stock
             const newQuantity = existingItem.quantity + quantity;
             if (newQuantity > variant.stock) {
               throw new Error(`Only ${variant.stock} items available in stock`);
@@ -60,8 +62,8 @@ export const useCart = create<CartStore>()(
           return { items: [...state.items, newItem] };
         });
 
-        // Detach async sync completely
-        void get().syncWithServer().catch(console.error);
+        // Sync in background
+        await get().syncWithServer().catch(console.error);
       },
 
       removeItem: (itemId) => {
@@ -70,13 +72,12 @@ export const useCart = create<CartStore>()(
         set((state) => ({
           items: state.items.filter((item) => item.id !== itemId),
         }));
-
-        void get().syncWithServer().catch(console.error);
+        get().syncWithServer().catch(console.error);
       },
 
       updateQuantity: (itemId, quantity) => {
         if (!itemId) return;
-
+        
         if (quantity < 1) {
           get().removeItem(itemId);
           return;
@@ -85,6 +86,7 @@ export const useCart = create<CartStore>()(
         set((state) => ({
           items: state.items.map((item) => {
             if (item.id === itemId) {
+              // Validate against stock
               if (quantity > item.variant.stock) {
                 throw new Error(`Cannot exceed available stock of ${item.variant.stock}`);
               }
@@ -93,19 +95,18 @@ export const useCart = create<CartStore>()(
             return item;
           }),
         }));
-
-        void get().syncWithServer().catch(console.error);
+        get().syncWithServer().catch(console.error);
       },
 
       clearCart: () => {
         set({ items: [] });
-        void get().syncWithServer().catch(console.error);
+        get().syncWithServer().catch(console.error);
       },
 
       getTotal: () => {
         const { items } = get();
         return items.reduce(
-          (total, item) => total + item.variant.price * item.quantity,
+          (total, item) => total + (item.variant.price * item.quantity),
           0
         );
       },
@@ -144,18 +145,17 @@ export const useCart = create<CartStore>()(
 
             const { error } = await supabase
               .from('user_carts')
-              .upsert(
-                {
-                  user_id: session.user.id,
-                  items: cartData,
-                  updated_at: new Date().toISOString(),
-                },
-                { onConflict: 'user_id' }
-              );
+              .upsert({
+                user_id: session.user.id,
+                items: cartData,
+                updated_at: new Date().toISOString(),
+              }, {
+                onConflict: 'user_id'
+              });
 
             if (error) throw error;
           } else {
-            // Guest user: store in localStorage
+            // Store in localStorage for guests
             const offlineCart = {
               timestamp: Date.now(),
               items: get().items,
@@ -164,6 +164,7 @@ export const useCart = create<CartStore>()(
           }
         } catch (error) {
           console.error('Failed to sync cart:', error);
+          // Don't throw - allow offline operation
         } finally {
           set({ isSyncing: false });
         }

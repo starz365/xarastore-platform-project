@@ -63,7 +63,8 @@
     "ua-parser-js": "^1.0.37",
     "workbox-webpack-plugin": "^7.0.0",
     "zod": "^3.25.76",
-    "zustand": "^4.4.0"
+    "zustand": "^4.4.0",
+	"pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",

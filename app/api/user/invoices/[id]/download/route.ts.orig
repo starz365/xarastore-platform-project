@@ -1,0 +1,319 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { format } from 'date-fns';
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+	const supabase = await createClient();
+    const { id } = await params;
+    const cookieStore = cookies();
+    const token = cookieStore.get('sb-access-token');
+
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token.value);
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Get invoice
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .select('*, invoice_items(*)')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (invoiceError || !invoice) {
+      return NextResponse.json(
+        { error: 'Invoice not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get user profile
+    const { data: profile } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    // Generate PDF
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595.276, 841.890]); // A4 size
+    const { width, height } = page.getSize();
+    
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    // Header
+    page.drawText('XARASTORE', {
+      x: 50,
+      y: height - 50,
+      size: 24,
+      font: boldFont,
+      color: rgb(0.8, 0, 0), // Xarastore red
+    });
+
+    page.drawText('INVOICE', {
+      x: width - 150,
+      y: height - 50,
+      size: 20,
+      font: boldFont,
+      color: rgb(0.2, 0.2, 0.2),
+    });
+
+    // Invoice details
+    page.drawText(`Invoice #: ${invoice.invoice_number}`, {
+      x: 50,
+      y: height - 100,
+      size: 10,
+      font: font,
+    });
+
+    page.drawText(`Date: ${format(new Date(invoice.created_at), 'PPP')}`, {
+      x: 50,
+      y: height - 120,
+      size: 10,
+      font: font,
+    });
+
+    page.drawText(`Due Date: ${invoice.due_date ? format(new Date(invoice.due_date), 'PPP') : 'N/A'}`, {
+      x: 50,
+      y: height - 140,
+      size: 10,
+      font: font,
+    });
+
+    page.drawText(`Status: ${invoice.status.toUpperCase()}`, {
+      x: 50,
+      y: height - 160,
+      size: 10,
+      font: font,
+      color: invoice.status === 'paid' ? rgb(0, 0.6, 0) : rgb(0.8, 0, 0),
+    });
+
+    // Bill to
+    page.drawText('Bill To:', {
+      x: width - 300,
+      y: height - 100,
+      size: 10,
+      font: boldFont,
+    });
+
+    page.drawText(profile?.full_name || user.email || '', {
+      x: width - 300,
+      y: height - 120,
+      size: 10,
+      font: font,
+    });
+
+    if (invoice.billing_address) {
+      page.drawText(invoice.billing_address.street || '', {
+        x: width - 300,
+        y: height - 140,
+        size: 10,
+        font: font,
+      });
+      page.drawText(
+        `${invoice.billing_address.city || ''}, ${invoice.billing_address.state || ''} ${invoice.billing_address.postal_code || ''}`,
+        {
+          x: width - 300,
+          y: height - 160,
+          size: 10,
+          font: font,
+        }
+      );
+    }
+
+    // Table headers
+    const tableY = height - 220;
+    page.drawLine({
+      start: { x: 50, y: tableY + 15 },
+      end: { x: width - 50, y: tableY + 15 },
+      thickness: 1,
+      color: rgb(0.8, 0.8, 0.8),
+    });
+
+    page.drawText('Description', {
+      x: 50,
+      y: tableY,
+      size: 10,
+      font: boldFont,
+    });
+
+    page.drawText('Qty', {
+      x: 300,
+      y: tableY,
+      size: 10,
+      font: boldFont,
+    });
+
+    page.drawText('Unit Price', {
+      x: 350,
+      y: tableY,
+      size: 10,
+      font: boldFont,
+    });
+
+    page.drawText('Amount', {
+      x: 450,
+      y: tableY,
+      size: 10,
+      font: boldFont,
+    });
+
+    page.drawLine({
+      start: { x: 50, y: tableY - 5 },
+      end: { x: width - 50, y: tableY - 5 },
+      thickness: 1,
+      color: rgb(0.8, 0.8, 0.8),
+    });
+
+    // Table rows
+    let yPos = tableY - 25;
+    const items = invoice.invoice_items || [];
+
+    for (const item of items) {
+      page.drawText(item.description, {
+        x: 50,
+        y: yPos,
+        size: 9,
+        font: font,
+      });
+
+      page.drawText(item.quantity.toString(), {
+        x: 300,
+        y: yPos,
+        size: 9,
+        font: font,
+      });
+
+      page.drawText(`KES ${item.unit_price.toLocaleString()}`, {
+        x: 350,
+        y: yPos,
+        size: 9,
+        font: font,
+      });
+
+      page.drawText(`KES ${(item.quantity * item.unit_price).toLocaleString()}`, {
+        x: 450,
+        y: yPos,
+        size: 9,
+        font: font,
+      });
+
+      yPos -= 20;
+    }
+
+    // Totals
+    const totalY = yPos - 30;
+    page.drawLine({
+      start: { x: 300, y: totalY + 15 },
+      end: { x: width - 50, y: totalY + 15 },
+      thickness: 1,
+      color: rgb(0.8, 0.8, 0.8),
+    });
+
+    page.drawText('Subtotal:', {
+      x: 350,
+      y: totalY,
+      size: 10,
+      font: font,
+    });
+
+    page.drawText(`KES ${parseFloat(invoice.subtotal || invoice.amount).toLocaleString()}`, {
+      x: 450,
+      y: totalY,
+      size: 10,
+      font: boldFont,
+    });
+
+    if (invoice.tax > 0) {
+      page.drawText('Tax:', {
+        x: 350,
+        y: totalY - 20,
+        size: 10,
+        font: font,
+      });
+
+      page.drawText(`KES ${parseFloat(invoice.tax).toLocaleString()}`, {
+        x: 450,
+        y: totalY - 20,
+        size: 10,
+        font: font,
+      });
+
+      page.drawText('Total:', {
+        x: 350,
+        y: totalY - 40,
+        size: 10,
+        font: boldFont,
+      });
+
+      page.drawText(`KES ${parseFloat(invoice.total || invoice.amount).toLocaleString()}`, {
+        x: 450,
+        y: totalY - 40,
+        size: 10,
+        font: boldFont,
+      });
+    }
+
+    // Footer
+    page.drawText('Thank you for your business!', {
+      x: 50,
+      y: 50,
+      size: 10,
+      font: font,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+
+    page.drawText('For questions about this invoice, contact billing@xarastore.com', {
+      x: 50,
+      y: 30,
+      size: 8,
+      font: font,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+
+    // Serialize PDF
+    const pdfBytes = await pdfDoc.save();
+
+    // Log download
+    await supabase.from('invoice_downloads').insert({
+      invoice_id: id,
+      user_id: user.id,
+      downloaded_at: new Date().toISOString(),
+      ip_address: request.headers.get('x-forwarded-for') || request.ip,
+    });
+
+    // Return PDF
+    return new NextResponse(pdfBytes, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="invoice-${invoice.invoice_number}.pdf"`,
+        'Content-Length': pdfBytes.length.toString(),
+      },
+    });
+  } catch (error: any) {
+    console.error('Invoice download error:', error);
+    return NextResponse.json(
+      { error: 'Failed to generate invoice PDF' },
+      { status: 500 }
+    );
+  }
+}

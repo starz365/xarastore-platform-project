@@ -20,7 +20,9 @@ import {
   Mail,
   CheckCircle,
   XCircle,
+  Copy,
   Download,
+  RefreshCw,
   Trash2,
   LogOut,
   Clock,
@@ -33,16 +35,14 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
-import { Card } from '@/components/ui/Card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Avatar } from '@/components/ui/Avatar';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { Modal } from '@/components/ui/Modal';
+import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { QRCode } from '@/components/ui/QRCode';
 import { formatDate } from '@/lib/utils/date';
 import { cn } from '@/lib/utils/cn';
-
-// ---------- Type Definitions ---------- //
 
 interface UserData {
   id: string;
@@ -96,25 +96,10 @@ interface Webhook {
   enabled: boolean;
 }
 
-// ---------- Skeleton Loader Component ---------- //
-
-const ProfileSkeleton = () => (
-  <div className="p-6 space-y-4">
-    <Skeleton className="w-32 h-32 rounded-full mx-auto" />
-    <Skeleton className="w-48 h-6 mx-auto" />
-    <Skeleton className="w-full h-6" />
-    <Skeleton className="w-full h-6" />
-  </div>
-);
-
-// ---------- Main Profile Client ---------- //
-
 export default function ProfileClient() {
   const router = useRouter();
   const { session, isLoading: sessionLoading } = useSession();
-  const { toast } = useToast();
-
-  // ---------- State Management ---------- //
+  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -122,6 +107,13 @@ export default function ProfileClient() {
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [show2FAModal, setShow2FAModal] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [twoFASecret, setTwoFASecret] = useState('');
+  const [twoFAQRCode, setTwoFAQRCode] = useState('');
+  const [twoFAVerificationCode, setTwoFAVerificationCode] = useState('');
+  const [newApiKey, setNewApiKey] = useState<{ key: string; id: string } | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [notifications, setNotifications] = useState({
     marketing: true,
@@ -130,6 +122,7 @@ export default function ProfileClient() {
     updates: false,
   });
 
+  // Form states
   const [profileForm, setProfileForm] = useState({
     fullName: '',
     email: '',
@@ -156,31 +149,27 @@ export default function ProfileClient() {
     apiKey: false,
   });
 
-  const [twoFASecret, setTwoFASecret] = useState('');
-  const [twoFAQRCode, setTwoFAQRCode] = useState('');
-  const [twoFAVerificationCode, setTwoFAVerificationCode] = useState('');
-  const [newApiKey, setNewApiKey] = useState<{ key: string; id: string } | null>(null);
-
-  // ---------- Session & Data Fetch ---------- //
   useEffect(() => {
     if (!sessionLoading && !session) {
       router.push('/auth/login?redirect=/account/profile');
       return;
     }
 
-    if (session) fetchAllUserData();
-  }, [session, sessionLoading]);
+    if (session) {
+      fetchUserData();
+    }
+  }, [session, sessionLoading, router]);
 
-  const fetchAllUserData = async () => {
+  const fetchUserData = async () => {
     setIsLoading(true);
     try {
       const [
-        userRes,
-        sessionsRes,
-        apiKeysRes,
-        invoicesRes,
-        webhooksRes,
-        preferencesRes,
+        userResponse,
+        sessionsResponse,
+        apiKeysResponse,
+        invoicesResponse,
+        webhooksResponse,
+        preferencesResponse,
       ] = await Promise.all([
         fetch('/api/user/profile'),
         fetch('/api/user/sessions'),
@@ -190,33 +179,54 @@ export default function ProfileClient() {
         fetch('/api/user/preferences'),
       ]);
 
-      if (!userRes.ok) throw new Error('Failed to fetch profile data');
-      const userJson: UserData = await userRes.json();
-      setUserData(userJson);
+      if (!userResponse.ok) throw new Error('Failed to fetch user data');
+      
+      const userData = await userResponse.json();
+      setUserData(userData);
       setProfileForm({
-        fullName: userJson.fullName,
-        email: userJson.email,
+        fullName: userData.fullName,
+        email: userData.email,
         avatar: null,
       });
 
-      if (sessionsRes.ok) setSessions(await sessionsRes.json());
-      if (apiKeysRes.ok) setApiKeys(await apiKeysRes.json());
-      if (invoicesRes.ok) setInvoices(await invoicesRes.json());
-      if (webhooksRes.ok) setWebhooks(await webhooksRes.json());
-      if (preferencesRes.ok) {
-        const prefs = await preferencesRes.json();
+      if (sessionsResponse.ok) {
+        const sessionsData = await sessionsResponse.json();
+        setSessions(sessionsData);
+      }
+
+      if (apiKeysResponse.ok) {
+        const apiKeysData = await apiKeysResponse.json();
+        setApiKeys(apiKeysData);
+      }
+
+      if (invoicesResponse.ok) {
+        const invoicesData = await invoicesResponse.json();
+        setInvoices(invoicesData);
+      }
+
+      if (webhooksResponse.ok) {
+        const webhooksData = await webhooksResponse.json();
+        setWebhooks(webhooksData);
+      }
+
+      if (preferencesResponse.ok) {
+        const prefs = await preferencesResponse.json();
         setTheme(prefs.theme);
         setNotifications(prefs.notifications);
       }
-    } catch (err) {
-      console.error(err);
-      toast({ title: 'Error', description: 'Failed to load profile data', variant: 'error' });
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      addToast({
+        title: 'Error',
+        description: 'Failed to load profile data',
+        variant: 'error',
+        duration: 5000,
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ---------- Profile Update ---------- //
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormLoading(prev => ({ ...prev, profile: true }));
@@ -226,25 +236,45 @@ export default function ProfileClient() {
       const formData = new FormData();
       formData.append('fullName', profileForm.fullName);
       formData.append('email', profileForm.email);
-      if (profileForm.avatar) formData.append('avatar', profileForm.avatar);
+      if (profileForm.avatar) {
+        formData.append('avatar', profileForm.avatar);
+      }
 
-      const res = await fetch('/api/user/profile', { method: 'PUT', body: formData });
-      const data = await res.json();
-      if (!res.ok) {
-        if (data.errors) setErrors(data.errors);
-        throw new Error(data.message || 'Profile update failed');
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.errors) {
+          setErrors(data.errors);
+        } else {
+          throw new Error(data.message || 'Update failed');
+        }
+        return;
       }
 
       setUserData(prev => ({ ...prev!, ...data.user }));
-      toast({ title: 'Success', description: 'Profile updated', variant: 'success' });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to update profile', variant: 'error' });
+      addToast({
+        title: 'Success',
+        description: 'Profile updated successfully',
+        variant: 'success',
+        duration: 3000,
+      });
+    } catch (error: any) {
+      addToast({
+        title: 'Error',
+        description: error.message || 'Failed to update profile',
+        variant: 'error',
+        duration: 5000,
+      });
     } finally {
       setFormLoading(prev => ({ ...prev, profile: false }));
     }
   };
 
-  // ---------- Password Update ---------- //
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormLoading(prev => ({ ...prev, password: true }));
@@ -263,7 +293,7 @@ export default function ProfileClient() {
     }
 
     try {
-      const res = await fetch('/api/user/security/password', {
+      const response = await fetch('/api/user/security/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -272,99 +302,382 @@ export default function ProfileClient() {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Password change failed');
+      const data = await response.json();
 
-      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      toast({ title: 'Success', description: 'Password updated', variant: 'success' });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to change password', variant: 'error' });
+      if (!response.ok) {
+        if (data.errors) {
+          setErrors(data.errors);
+        } else {
+          throw new Error(data.message || 'Password change failed');
+        }
+        return;
+      }
+
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+
+      addToast({
+        title: 'Success',
+        description: 'Password changed successfully',
+        variant: 'success',
+        duration: 3000,
+      });
+    } catch (error: any) {
+      addToast({
+        title: 'Error',
+        description: error.message || 'Failed to change password',
+        variant: 'error',
+        duration: 5000,
+      });
     } finally {
       setFormLoading(prev => ({ ...prev, password: false }));
     }
   };
 
-  // ---------- 2FA Handlers ---------- //
   const handleEnable2FA = async () => {
     setFormLoading(prev => ({ ...prev, twoFA: true }));
     try {
-      const res = await fetch('/api/user/security/2fa/enable', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to enable 2FA');
+      const response = await fetch('/api/user/security/2fa/enable', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to enable 2FA');
+      }
 
       setTwoFASecret(data.secret);
       setTwoFAQRCode(data.qrCode);
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to enable 2FA', variant: 'error' });
+      setShow2FAModal(true);
+    } catch (error: any) {
+      addToast({
+        title: 'Error',
+        description: error.message || 'Failed to enable 2FA',
+        variant: 'error',
+        duration: 5000,
+      });
     } finally {
       setFormLoading(prev => ({ ...prev, twoFA: false }));
     }
   };
 
-  const handleDisable2FA = async () => {
-    if (!confirm('Disable 2FA?')) return;
+  const handleVerify2FA = async () => {
+    if (twoFAVerificationCode.length !== 6) {
+      setErrors({ twoFA: 'Invalid verification code' });
+      return;
+    }
+
     try {
-      const res = await fetch('/api/user/security/2fa/disable', { method: 'POST' });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || 'Failed to disable 2FA');
+      const response = await fetch('/api/user/security/2fa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          secret: twoFASecret,
+          code: twoFAVerificationCode,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Verification failed');
       }
-      setUserData(prev => ({ ...prev!, twoFactorEnabled: false }));
-      toast({ title: 'Success', description: '2FA disabled', variant: 'success' });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to disable 2FA', variant: 'error' });
+
+      setUserData(prev => ({ ...prev!, twoFactorEnabled: true }));
+      setShow2FAModal(false);
+      setTwoFAVerificationCode('');
+      addToast({
+        title: 'Success',
+        description: '2FA enabled successfully',
+        variant: 'success',
+        duration: 3000,
+      });
+    } catch (error: any) {
+      setErrors({ twoFA: error.message });
     }
   };
 
-  // ---------- Theme & Notification ---------- //
-  const handleThemeChange = async (newTheme: 'light' | 'dark') => {
-    setTheme(newTheme);
-    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+  const handleDisable2FA = async () => {
+    if (!confirm('Are you sure you want to disable two-factor authentication?')) {
+      return;
+    }
+
     try {
-      await fetch('/api/user/preferences/theme', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ theme: newTheme }),
+      const response = await fetch('/api/user/security/2fa/disable', {
+        method: 'POST',
       });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to update theme', variant: 'error' });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to disable 2FA');
+      }
+
+      setUserData(prev => ({ ...prev!, twoFactorEnabled: false }));
+      addToast({
+        title: 'Success',
+        description: '2FA disabled successfully',
+        variant: 'success',
+        duration: 3000,
+      });
+    } catch (error: any) {
+      addToast({
+        title: 'Error',
+        description: error.message || 'Failed to disable 2FA',
+        variant: 'error',
+        duration: 5000,
+      });
+    }
+  };
+
+  const handleRevokeSession = async (sessionId: string) => {
+    try {
+      const response = await fetch('/api/user/sessions/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to revoke session');
+      }
+
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      addToast({
+        title: 'Success',
+        description: 'Session revoked successfully',
+        variant: 'success',
+        duration: 3000,
+      });
+    } catch (error: any) {
+      addToast({
+        title: 'Error',
+        description: error.message || 'Failed to revoke session',
+        variant: 'error',
+        duration: 5000,
+      });
+    }
+  };
+
+  const handleRevokeAllSessions = async () => {
+    if (!confirm('This will sign you out from all other devices. Continue?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/user/sessions/revoke-all', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to revoke sessions');
+      }
+
+      setSessions(prev => prev.filter(s => s.isCurrent));
+      addToast({
+        title: 'Success',
+        description: 'All other sessions revoked',
+        variant: 'success',
+        duration: 3000,
+      });
+    } catch (error: any) {
+      addToast({
+        title: 'Error',
+        description: error.message || 'Failed to revoke sessions',
+        variant: 'error',
+        duration: 5000,
+      });
+    }
+  };
+
+  const handleCreateApiKey = async () => {
+    setFormLoading(prev => ({ ...prev, apiKey: true }));
+    try {
+      const response = await fetch('/api/user/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `API Key ${new Date().toLocaleDateString()}`,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create API key');
+      }
+
+      setNewApiKey({ key: data.key, id: data.id });
+      setApiKeys(prev => [...prev, {
+        id: data.id,
+        name: data.name,
+        prefix: data.prefix,
+        createdAt: data.createdAt,
+        lastUsed: null,
+        expiresAt: data.expiresAt,
+      }]);
+      setShowApiKeyModal(true);
+    } catch (error: any) {
+      addToast({
+        title: 'Error',
+        description: error.message || 'Failed to create API key',
+        variant: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setFormLoading(prev => ({ ...prev, apiKey: false }));
+    }
+  };
+
+  const handleRevokeApiKey = async (keyId: string) => {
+    if (!confirm('This API key will stop working immediately. Continue?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/user/api-keys/${keyId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to revoke API key');
+      }
+
+      setApiKeys(prev => prev.filter(key => key.id !== keyId));
+      addToast({
+        title: 'Success',
+        description: 'API key revoked successfully',
+        variant: 'success',
+        duration: 3000,
+      });
+    } catch (error: any) {
+      addToast({
+        title: 'Error',
+        description: error.message || 'Failed to revoke API key',
+        variant: 'error',
+        duration: 5000,
+      });
     }
   };
 
   const handleUpdateNotification = async (key: keyof typeof notifications) => {
     const updated = { ...notifications, [key]: !notifications[key] };
     setNotifications(updated);
+
     try {
-      await fetch('/api/user/preferences/notifications', {
+      const response = await fetch('/api/user/preferences/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
       });
-    } catch {
+
+      if (!response.ok) {
+        throw new Error('Failed to update preferences');
+      }
+    } catch (error) {
       setNotifications(notifications);
-      toast({ title: 'Error', description: 'Failed to update notifications', variant: 'error' });
+      addToast({
+        title: 'Error',
+        description: 'Failed to update notification preferences',
+        variant: 'error',
+        duration: 5000,
+      });
     }
   };
 
-  // ---------- Data Export ---------- //
+  const handleThemeChange = async (newTheme: 'light' | 'dark') => {
+    setTheme(newTheme);
+    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+
+    try {
+      const response = await fetch('/api/user/preferences/theme', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: newTheme }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update theme');
+      }
+    } catch (error) {
+      addToast({
+        title: 'Error',
+        description: 'Failed to update theme preference',
+        variant: 'error',
+        duration: 5000,
+      });
+    }
+  };
+
+  const handleDeleteAccount = async (password: string) => {
+    try {
+      const response = await fetch('/api/user/account', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete account');
+      }
+
+      addToast({
+        title: 'Account Deleted',
+        description: 'Your account has been successfully deleted',
+        variant: 'success',
+        duration: 5000,
+      });
+
+      setTimeout(() => {
+        router.push('/');
+      }, 2000);
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
   const handleExportData = async () => {
     try {
-      const res = await fetch('/api/user/data/export');
-      if (!res.ok) throw new Error('Failed to export data');
-      const blob = await res.blob();
+      const response = await fetch('/api/user/data/export');
+      
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `xarastore-data-${new Date().toISOString()}.zip`;
+      a.download = `xarastore-data-${new Date().toISOString().split('T')[0]}.zip`;
       a.click();
-      toast({ title: 'Success', description: 'Download started', variant: 'success' });
-    } catch (err) {
-      toast({ title: 'Error', description: (err as Error).message, variant: 'error' });
+      
+      addToast({
+        title: 'Success',
+        description: 'Data export started. Download will begin shortly.',
+        variant: 'success',
+        duration: 3000,
+      });
+    } catch (error) {
+      addToast({
+        title: 'Error',
+        description: 'Failed to export data',
+        variant: 'error',
+        duration: 5000,
+      });
     }
   };
 
-  // ---------- Render ---------- //
-  if (isLoading || !userData) return <ProfileSkeleton />;
+  if (isLoading || !userData) {
+    return <ProfileSkeleton />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
@@ -380,23 +693,980 @@ export default function ProfileClient() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid grid-cols-2 md:grid-cols-6 gap-2">
-            <TabsTrigger value="overview"><User className="w-4 h-4 mr-2" /> Overview</TabsTrigger>
-            <TabsTrigger value="security"><Shield className="w-4 h-4 mr-2" /> Security</TabsTrigger>
-            <TabsTrigger value="billing"><CreditCard className="w-4 h-4 mr-2" /> Billing</TabsTrigger>
-            <TabsTrigger value="api"><Key className="w-4 h-4 mr-2" /> API</TabsTrigger>
-            <TabsTrigger value="preferences"><Settings className="w-4 h-4 mr-2" /> Preferences</TabsTrigger>
-            <TabsTrigger value="danger" className="text-red-600 dark:text-red-400"><AlertTriangle className="w-4 h-4 mr-2" /> Danger</TabsTrigger>
+            <TabsTrigger value="overview" className="flex items-center space-x-2">
+              <User className="w-4 h-4" />
+              <span className="hidden md:inline">Overview</span>
+            </TabsTrigger>
+            <TabsTrigger value="security" className="flex items-center space-x-2">
+              <Shield className="w-4 h-4" />
+              <span className="hidden md:inline">Security</span>
+            </TabsTrigger>
+            <TabsTrigger value="billing" className="flex items-center space-x-2">
+              <CreditCard className="w-4 h-4" />
+              <span className="hidden md:inline">Billing</span>
+            </TabsTrigger>
+            <TabsTrigger value="api" className="flex items-center space-x-2">
+              <Key className="w-4 h-4" />
+              <span className="hidden md:inline">API</span>
+            </TabsTrigger>
+            <TabsTrigger value="preferences" className="flex items-center space-x-2">
+              <Settings className="w-4 h-4" />
+              <span className="hidden md:inline">Preferences</span>
+            </TabsTrigger>
+            <TabsTrigger value="danger" className="flex items-center space-x-2 text-red-600 dark:text-red-400">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="hidden md:inline">Danger</span>
+            </TabsTrigger>
           </TabsList>
 
-          {/* Tabs content placeholders */}
-          <TabsContent value="overview">{/* ...Overview content (Profile + Account Details) ... */}</TabsContent>
-          <TabsContent value="security">{/* ...Security content (Password + 2FA + Sessions) ... */}</TabsContent>
-          <TabsContent value="billing">{/* ...Billing content (Plans + Invoices) ... */}</TabsContent>
-          <TabsContent value="api">{/* ...API content (Keys + Webhooks) ... */}</TabsContent>
-          <TabsContent value="preferences">{/* ...Preferences content (Theme + Notifications + Export Data) ... */}</TabsContent>
-          <TabsContent value="danger">{/* ...Danger content (Delete Account) ... */}</TabsContent>
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle>Profile Information</CardTitle>
+                    <CardDescription>Update your personal information</CardDescription>
+                  </div>
+                  <Badge variant={userData.emailVerified ? 'success' : 'warning'}>
+                    {userData.emailVerified ? 'Verified' : 'Unverified'}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleProfileUpdate} className="space-y-6">
+                  <div className="flex items-center space-x-6">
+                    <Avatar
+                      src={userData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.fullName)}&background=dc2626&color=fff`}
+                      alt={userData.fullName}
+                      size="lg"
+                    />
+                    <div>
+                      <label
+                        htmlFor="avatar"
+                        className="cursor-pointer bg-white dark:bg-gray-800 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        Change Avatar
+                      </label>
+                      <input
+                        id="avatar"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setProfileForm(prev => ({ ...prev, avatar: file }));
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Full Name
+                      </label>
+                      <Input
+                        value={profileForm.fullName}
+                        onChange={(e) => setProfileForm(prev => ({ ...prev, fullName: e.target.value }))}
+                        error={errors.fullName}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Email Address
+                      </label>
+                      <Input
+                        type="email"
+                        value={profileForm.email}
+                        onChange={(e) => setProfileForm(prev => ({ ...prev, email: e.target.value }))}
+                        error={errors.email}
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    loading={formLoading.profile}
+                  >
+                    Save Changes
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Account Details</CardTitle>
+                <CardDescription>Your account information and activity</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-600 dark:text-gray-400">User ID</span>
+                    <code className="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                      {userData.id}
+                    </code>
+                  </div>
+                  <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-600 dark:text-gray-400">Role</span>
+                    <Badge variant="info">{userData.role}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-600 dark:text-gray-400">Member Since</span>
+                    <span className="flex items-center">
+                      <Calendar className="w-4 h-4 mr-2 text-gray-400" />
+                      {formatDate(userData.createdAt, 'PPP')}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-600 dark:text-gray-400">Last Login</span>
+                    <span className="flex items-center">
+                      <Clock className="w-4 h-4 mr-2 text-gray-400" />
+                      {formatDate(userData.lastLoginAt, 'PPP p')}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-600 dark:text-gray-400">Last Device</span>
+                    <span className="flex items-center text-sm">
+                      <Laptop className="w-4 h-4 mr-2 text-gray-400" />
+                      {userData.lastLoginUserAgent}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-3">
+                    <span className="text-gray-600 dark:text-gray-400">Last IP</span>
+                    <span className="flex items-center text-sm">
+                      <Globe className="w-4 h-4 mr-2 text-gray-400" />
+                      {userData.lastLoginIp}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Security Tab */}
+          <TabsContent value="security" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Change Password</CardTitle>
+                <CardDescription>Update your password to keep your account secure</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handlePasswordChange} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Current Password
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type={showPassword.current ? 'text' : 'password'}
+                        value={passwordForm.currentPassword}
+                        onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
+                        error={errors.currentPassword}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(prev => ({ ...prev, current: !prev.current }))}
+                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                      >
+                        {showPassword.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type={showPassword.new ? 'text' : 'password'}
+                        value={passwordForm.newPassword}
+                        onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                        error={errors.newPassword}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(prev => ({ ...prev, new: !prev.new }))}
+                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                      >
+                        {showPassword.new ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type={showPassword.confirm ? 'text' : 'password'}
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                        error={errors.confirmPassword}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(prev => ({ ...prev, confirm: !prev.confirm }))}
+                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                      >
+                        {showPassword.confirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    loading={formLoading.password}
+                  >
+                    Update Password
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Two-Factor Authentication</CardTitle>
+                    <CardDescription>Add an extra layer of security to your account</CardDescription>
+                  </div>
+                  <Badge variant={userData.twoFactorEnabled ? 'success' : 'warning'}>
+                    {userData.twoFactorEnabled ? 'Enabled' : 'Disabled'}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!userData.twoFactorEnabled ? (
+                  <Button
+                    variant="primary"
+                    onClick={handleEnable2FA}
+                    loading={formLoading.twoFA}
+                  >
+                    <Fingerprint className="w-4 h-4 mr-2" />
+                    Enable 2FA
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={handleDisable2FA}
+                    className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"
+                  >
+                    Disable 2FA
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Active Sessions</CardTitle>
+                    <CardDescription>Manage your active sessions across devices</CardDescription>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRevokeAllSessions}
+                  >
+                    Sign Out All Other Devices
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {sessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                    >
+                      <div className="flex items-center space-x-4">
+                        {session.device.includes('Mobile') ? (
+                          <Smartphone className="w-5 h-5 text-gray-400" />
+                        ) : (
+                          <Laptop className="w-5 h-5 text-gray-400" />
+                        )}
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium">{session.device}</span>
+                            {session.isCurrent && (
+                              <Badge size="sm" variant="primary">Current</Badge>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {session.browser} on {session.os} • {session.location}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Last active: {formatDate(session.lastActive, 'PPP p')}
+                          </div>
+                        </div>
+                      </div>
+                      {!session.isCurrent && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRevokeSession(session.id)}
+                        >
+                          <LogOut className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Billing Tab */}
+          <TabsContent value="billing" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Current Plan</CardTitle>
+                <CardDescription>Your subscription plan and billing information</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-gradient-to-r from-red-600 to-red-800 text-white p-6 rounded-lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-2xl font-bold">Professional Plan</h3>
+                      <p className="text-red-100">Everything you need to grow</p>
+                    </div>
+                    <Badge variant="white">Active</Badge>
+                  </div>
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-red-200 text-sm">Price</div>
+                      <div className="text-2xl font-bold">KES 2,999/month</div>
+                    </div>
+                    <div>
+                      <div className="text-red-200 text-sm">Next Billing</div>
+                      <div className="font-semibold">{formatDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), 'PPP')}</div>
+                    </div>
+                    <div>
+                      <div className="text-red-200 text-sm">Payment Method</div>
+                      <div className="font-semibold">Visa •••• 4242</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex space-x-4">
+                  <Button variant="primary">Upgrade Plan</Button>
+                  <Button variant="secondary">Update Payment Method</Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Invoices</CardTitle>
+                <CardDescription>View and download your invoices</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {invoices.map((invoice) => (
+                    <div
+                      key={invoice.id}
+                      className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <CreditCard className="w-5 h-5 text-gray-400" />
+                        <div>
+                          <div className="font-medium">Invoice #{invoice.number}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {formatDate(invoice.date, 'PPP')} • KES {invoice.amount.toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'pending' ? 'warning' : 'error'}>
+                          {invoice.status}
+                        </Badge>
+                        <Button variant="ghost" size="sm" as="a" href={invoice.pdfUrl} download>
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* API Tab */}
+          <TabsContent value="api" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>API Keys</CardTitle>
+                    <CardDescription>Manage API keys for programmatic access</CardDescription>
+                  </div>
+                  <Button
+                    variant="primary"
+                    onClick={handleCreateApiKey}
+                    loading={formLoading.apiKey}
+                  >
+                    Generate New Key
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {apiKeys.map((key) => (
+                    <div
+                      key={key.id}
+                      className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3">
+                          <Key className="w-5 h-5 text-gray-400" />
+                          <div>
+                            <div className="font-medium">{key.name}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              Created: {formatDate(key.createdAt, 'PPP')}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <code className="text-sm bg-gray-200 dark:bg-gray-700 px-3 py-1 rounded">
+                          {key.prefix}...
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRevokeApiKey(key.id)}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {apiKeys.length === 0 && (
+                    <div className="text-center py-12">
+                      <Key className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <h3 className="font-medium text-gray-900 dark:text-white mb-2">
+                        No API Keys
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        Generate your first API key to get started
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Webhooks</CardTitle>
+                <CardDescription>Configure webhook endpoints for real-time notifications</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {webhooks.map((webhook) => (
+                    <div
+                      key={webhook.id}
+                      className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
+                    >
+                      <div>
+                        <div className="flex items-center space-x-3">
+                          <div className={cn(
+                            "w-2 h-2 rounded-full",
+                            webhook.enabled ? "bg-green-500" : "bg-gray-300"
+                          )} />
+                          <code className="text-sm">{webhook.url}</code>
+                        </div>
+                        <div className="mt-2 flex items-center space-x-2">
+                          {webhook.events.map((event) => (
+                            <Badge key={event} size="sm" variant="info">
+                              {event}
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-2">
+                          Last triggered: {webhook.lastTriggered ? formatDate(webhook.lastTriggered, 'PPP p') : 'Never'}
+                        </div>
+                      </div>
+                      <Switch
+                        checked={webhook.enabled}
+                        onCheckedChange={async (checked) => {
+                          try {
+                            const response = await fetch(`/api/user/webhooks/${webhook.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ enabled: checked }),
+                            });
+
+                            if (!response.ok) throw new Error('Update failed');
+
+                            setWebhooks(prev => prev.map(w => 
+                              w.id === webhook.id ? { ...w, enabled: checked } : w
+                            ));
+                          } catch (error) {
+                            addToast({
+                              title: 'Error',
+                              description: 'Failed to update webhook',
+                              variant: 'error',
+                              duration: 3000,
+                            });
+                          }
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <Button variant="secondary" className="mt-6">
+                  Add Webhook
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Preferences Tab */}
+          <TabsContent value="preferences" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Theme</CardTitle>
+                <CardDescription>Choose your preferred theme</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center space-x-4">
+                  <Button
+                    variant={theme === 'light' ? 'primary' : 'secondary'}
+                    onClick={() => handleThemeChange('light')}
+                    className="flex-1"
+                  >
+                    <Sun className="w-4 h-4 mr-2" />
+                    Light
+                  </Button>
+                  <Button
+                    variant={theme === 'dark' ? 'primary' : 'secondary'}
+                    onClick={() => handleThemeChange('dark')}
+                    className="flex-1"
+                  >
+                    <Moon className="w-4 h-4 mr-2" />
+                    Dark
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Notifications</CardTitle>
+                <CardDescription>Manage your notification preferences</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Mail className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <div className="font-medium">Marketing emails</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          Receive updates about new features and promotions
+                        </div>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={notifications.marketing}
+                      onCheckedChange={() => handleUpdateNotification('marketing')}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Shield className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <div className="font-medium">Security alerts</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          Get notified about security events and login attempts
+                        </div>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={notifications.security}
+                      onCheckedChange={() => handleUpdateNotification('security')}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <CreditCard className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <div className="font-medium">Billing updates</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          Receive invoices and payment confirmations
+                        </div>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={notifications.billing}
+                      onCheckedChange={() => handleUpdateNotification('billing')}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Bell className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <div className="font-medium">Product updates</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          Stay informed about new features and improvements
+                        </div>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={notifications.updates}
+                      onCheckedChange={() => handleUpdateNotification('updates')}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Privacy</CardTitle>
+                <CardDescription>Manage your privacy settings</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">Profile visibility</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        Make your profile visible to other users
+                      </div>
+                    </div>
+                    <Switch defaultChecked />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">Activity status</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        Show when you're active to other users
+                      </div>
+                    </div>
+                    <Switch />
+                  </div>
+
+                  <div className="pt-4">
+                    <Button variant="secondary" onClick={handleExportData}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Export My Data
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Danger Zone */}
+          <TabsContent value="danger">
+            <Card className="border-red-200 dark:border-red-800">
+              <CardHeader>
+                <CardTitle className="text-red-600 dark:text-red-400">Danger Zone</CardTitle>
+                <CardDescription>Irreversible and destructive actions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-medium text-red-800 dark:text-red-300">
+                          Delete Account
+                        </h3>
+                        <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                          This action is irreversible. All your data will be permanently deleted.
+                        </p>
+                      </div>
+                      <Button
+                        variant="destructive"
+                        onClick={() => setShowDeleteModal(true)}
+                      >
+                        Delete Account
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
+
+      {/* 2FA Setup Modal */}
+      <Modal
+        isOpen={show2FAModal}
+        onClose={() => setShow2FAModal(false)}
+        title="Enable Two-Factor Authentication"
+      >
+        <div className="space-y-6">
+          <div className="text-center">
+            <QRCode value={twoFAQRCode} size={200} />
+          </div>
+
+          <div>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Backup Code
+            </p>
+            <div className="flex items-center space-x-2">
+              <code className="flex-1 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-center font-mono">
+                {twoFASecret}
+              </code>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(twoFASecret);
+                  addToast({
+                    title: 'Copied!',
+                    description: 'Backup code copied to clipboard',
+                    variant: 'success',
+                    duration: 2000,
+                  });
+                }}
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Verification Code
+            </label>
+            <Input
+              value={twoFAVerificationCode}
+              onChange={(e) => setTwoFAVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000"
+              maxLength={6}
+              error={errors.twoFA}
+            />
+          </div>
+
+          <div className="flex space-x-3">
+            <Button
+              variant="primary"
+              className="flex-1"
+              onClick={handleVerify2FA}
+            >
+              Verify & Enable
+            </Button>
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setShow2FAModal(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* API Key Modal */}
+      <Modal
+        isOpen={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        title="New API Key Generated"
+      >
+        <div className="space-y-6">
+          <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                Copy your API key now. You won't be able to see it again!
+              </p>
+            </div>
+          </div>
+
+          {newApiKey && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                API Key
+              </label>
+              <div className="flex items-center space-x-2">
+                <code className="flex-1 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg font-mono text-sm break-all">
+                  {newApiKey.key}
+                </code>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    navigator.clipboard.writeText(newApiKey.key);
+                    addToast({
+                      title: 'Copied!',
+                      description: 'API key copied to clipboard',
+                      variant: 'success',
+                      duration: 2000,
+                    });
+                  }}
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => setShowApiKeyModal(false)}
+          >
+            I've Saved My Key
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Delete Account Modal */}
+      <DeleteAccountModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDeleteAccount}
+      />
     </div>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+      <div className="container-responsive max-w-6xl">
+        <Skeleton className="h-12 w-64 mb-8" />
+        <div className="space-y-6">
+          <Skeleton className="h-12 w-full rounded-lg" />
+          <Skeleton className="h-96 w-full rounded-lg" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteAccountModal({ isOpen, onClose, onConfirm }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (password: string) => Promise<void>;
+}) {
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { addToast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (confirmation !== 'DELETE') {
+      setError('Please type DELETE to confirm');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      await onConfirm(password);
+      addToast({
+        title: 'Account Deleted',
+        description: 'Your account has been permanently deleted',
+        variant: 'success',
+        duration: 5000,
+      });
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete account');
+      addToast({
+        title: 'Error',
+        description: err.message || 'Failed to delete account',
+        variant: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Delete Account">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+          <div className="flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-red-800 dark:text-red-300">
+                Warning: This action is permanent
+              </h3>
+              <ul className="mt-2 text-sm text-red-600 dark:text-red-400 list-disc list-inside">
+                <li>All your personal data will be permanently deleted</li>
+                <li>Your subscriptions will be cancelled</li>
+                <li>You will lose access to all services</li>
+                <li>This action cannot be undone</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Enter your password to confirm
+          </label>
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Type <span className="font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">DELETE</span> to confirm
+          </label>
+          <Input
+            value={confirmation}
+            onChange={(e) => setConfirmation(e.target.value)}
+            placeholder="DELETE"
+            required
+          />
+        </div>
+
+        {error && (
+          <p className="text-sm text-red-600">{error}</p>
+        )}
+
+        <div className="flex space-x-3">
+          <Button
+            type="submit"
+            variant="destructive"
+            className="flex-1"
+            loading={isLoading}
+          >
+            Permanently Delete Account
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="flex-1"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

@@ -1,0 +1,224 @@
+'use client';
+
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  ReactNode,
+} from 'react';
+import {
+  X,
+  CheckCircle2,
+  AlertCircle,
+  Info,
+  AlertTriangle,
+  Loader2,
+} from 'lucide-react';
+import { cn } from '@/lib/utils/css';
+
+type ToastVariant = 'success' | 'error' | 'warning' | 'info' | 'loading';
+
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
+export interface Toast {
+  id: string;
+  title: string;
+  description?: string;
+  variant?: ToastVariant;
+  duration?: number;
+  action?: ToastAction;
+}
+
+interface ToastContextType {
+  toasts: Toast[];
+  addToast: (toast: Omit<Toast, 'id'>) => string;
+  removeToast: (id: string) => void;
+  updateToast: (id: string, toast: Partial<Toast>) => void;
+}
+
+const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+const listeners: ((toast: Omit<Toast, 'id'>) => void)[] = [];
+
+export function toast(
+  title: string,
+  options?: Omit<Toast, 'id' | 'title'>
+) {
+  const payload = { title, ...options };
+
+  listeners.forEach((listener) => listener(payload));
+}
+
+toast.success = (title: string, description?: string) =>
+  toast(title, { description, variant: 'success' });
+
+toast.error = (title: string, description?: string) =>
+  toast(title, { description, variant: 'error' });
+
+toast.warning = (title: string, description?: string) =>
+  toast(title, { description, variant: 'warning' });
+
+toast.info = (title: string, description?: string) =>
+  toast(title, { description, variant: 'info' });
+
+toast.loading = (title: string) =>
+  toast(title, { variant: 'loading', duration: 100000 });
+
+toast.promise = async <T,>(
+  promise: Promise<T>,
+  {
+    loading,
+    success,
+    error,
+  }: {
+    loading: string;
+    success: string;
+    error: string;
+  }
+) => {
+  const id = crypto.randomUUID();
+
+  toast(loading, { variant: 'loading', duration: 100000 });
+
+  try {
+    const result = await promise;
+    toast.success(success);
+    return result;
+  } catch (err) {
+    toast.error(error);
+    throw err;
+  }
+};
+
+const icons = {
+  success: CheckCircle2,
+  error: AlertCircle,
+  warning: AlertTriangle,
+  info: Info,
+  loading: Loader2,
+};
+
+const styles = {
+  success: 'border-green-200 bg-green-50 text-green-900',
+  error: 'border-red-200 bg-red-50 text-red-900',
+  warning: 'border-yellow-200 bg-yellow-50 text-yellow-900',
+  info: 'border-blue-200 bg-blue-50 text-blue-900',
+  loading: 'border-gray-200 bg-white text-gray-900',
+};
+
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const updateToast = useCallback((id: string, toast: Partial<Toast>) => {
+    setToasts((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...toast } : t))
+    );
+  }, []);
+
+  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
+    const id = crypto.randomUUID();
+    const duration = toast.duration ?? 5000;
+
+    const newToast = { ...toast, id };
+
+    setToasts((prev) => [...prev, newToast]);
+
+    if (duration > 0) {
+      setTimeout(() => removeToast(id), duration);
+    }
+
+    return id;
+  }, [removeToast]);
+
+  useEffect(() => {
+    const listener = (toast: Omit<Toast, 'id'>) => addToast(toast);
+    listeners.push(listener);
+    return () => {
+      const index = listeners.indexOf(listener);
+      if (index > -1) listeners.splice(index, 1);
+    };
+  }, [addToast]);
+
+  return (
+    <ToastContext.Provider
+      value={{ toasts, addToast, removeToast, updateToast }}
+    >
+      {children}
+      <Toaster />
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast() {
+  const ctx = useContext(ToastContext);
+  if (!ctx) throw new Error('useToast must be used inside ToastProvider');
+  return ctx;
+}
+
+function Toaster() {
+  const { toasts, removeToast } = useToast();
+
+  if (!toasts.length) return null;
+
+  return (
+    <div className="fixed top-5 right-5 z-[100] flex flex-col gap-3 w-[360px] max-w-full">
+      {toasts.map((toast) => {
+        const Icon = icons[toast.variant || 'info'];
+
+        return (
+          <div
+            key={toast.id}
+            className={cn(
+              'rounded-xl border shadow-lg p-4 flex gap-3 animate-in fade-in slide-in-from-top-2',
+              styles[toast.variant || 'info']
+            )}
+          >
+            <Icon
+              className={cn(
+                'w-5 h-5 mt-1',
+                toast.variant === 'loading' && 'animate-spin'
+              )}
+            />
+
+            <div className="flex-1">
+              <div className="font-semibold">{toast.title}</div>
+              {toast.description && (
+                <p className="text-sm opacity-80 mt-1">
+                  {toast.description}
+                </p>
+              )}
+
+              {toast.action && (
+                <button
+                  className="text-sm underline mt-2"
+                  onClick={() => {
+                    toast.action?.onClick();
+                    removeToast(toast.id);
+                  }}
+                >
+                  {toast.action.label}
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="opacity-70 hover:opacity-100"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
