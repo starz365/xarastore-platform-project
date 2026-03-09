@@ -1,0 +1,627 @@
+'use client';
+
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef
+} from 'react';
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+
+import {
+  ChevronDown,
+  Sparkles,
+  TrendingUp,
+  Clock,
+  Star,
+  AlertCircle
+} from 'lucide-react';
+
+import { getCategories } from '@/lib/supabase/queries/products';
+import { logger } from '@/lib/utils/logger';
+
+/* ------------------------------------------------------------------ */
+/* Types */
+/* ------------------------------------------------------------------ */
+
+interface Category {
+  id: string;
+  slug: string;
+  name: string;
+  productCount: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Config */
+/* ------------------------------------------------------------------ */
+
+const MAX_RETRIES = 3;
+const HOVER_DELAY = 120;
+const CACHE_TTL = 10 * 60 * 1000;
+
+/* ------------------------------------------------------------------ */
+/* Cache */
+/* ------------------------------------------------------------------ */
+
+let cachedCategories: Category[] | null = null;
+let cacheTimestamp = 0;
+
+/* ------------------------------------------------------------------ */
+/* Component */
+/* ------------------------------------------------------------------ */
+
+export function MegaMenu() {
+
+  const router = useRouter();
+
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const focusTrapRef = useRef<HTMLDivElement | null>(null);
+
+  const [isOpen, setIsOpen] = useState(false);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [error, setError] = useState<Error | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
+
+  /* ------------------------------------------------------------------ */
+  /* Hover Intent */
+  /* ------------------------------------------------------------------ */
+
+  const clearHoverTimer = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  };
+
+  const handleMouseEnter = () => {
+    if (pinnedOpen) return;
+
+    clearHoverTimer();
+
+    hoverTimerRef.current = setTimeout(() => {
+      setIsOpen(true);
+    }, HOVER_DELAY);
+  };
+
+  const handleMouseLeave = () => {
+    if (pinnedOpen) return;
+
+    clearHoverTimer();
+
+    hoverTimerRef.current = setTimeout(() => {
+      setIsOpen(false);
+    }, HOVER_DELAY);
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* Pin Toggle */
+  /* ------------------------------------------------------------------ */
+
+  const togglePinned = useCallback(() => {
+    setPinnedOpen((prev) => {
+      const next = !prev;
+      setIsOpen(next);
+      return next;
+    });
+  }, []);
+
+  /* ------------------------------------------------------------------ */
+  /* Keyboard Escape */
+  /* ------------------------------------------------------------------ */
+
+  useEffect(() => {
+
+    const handleKey = (e: KeyboardEvent) => {
+
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+        setPinnedOpen(false);
+      }
+
+    };
+
+    document.addEventListener('keydown', handleKey);
+
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+    };
+
+  }, []);
+
+  /* ------------------------------------------------------------------ */
+  /* Focus Trap when pinned */
+  /* ------------------------------------------------------------------ */
+
+  useEffect(() => {
+
+    if (!pinnedOpen) return;
+
+    const focusable = focusTrapRef.current?.querySelectorAll<HTMLElement>(
+      'a, button'
+    );
+
+    if (!focusable || focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    const handleTab = (e: KeyboardEvent) => {
+
+      if (e.key !== 'Tab') return;
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+
+      if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+
+    };
+
+    document.addEventListener('keydown', handleTab);
+
+    return () => {
+      document.removeEventListener('keydown', handleTab);
+    };
+
+  }, [pinnedOpen]);
+
+  /* ------------------------------------------------------------------ */
+  /* Click Outside */
+  /* ------------------------------------------------------------------ */
+
+  useEffect(() => {
+
+    const handleOutside = (e: MouseEvent) => {
+
+      if (!rootRef.current) return;
+
+      if (!rootRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+        setPinnedOpen(false);
+      }
+
+    };
+
+    document.addEventListener('mousedown', handleOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+    };
+
+  }, []);
+
+  /* ------------------------------------------------------------------ */
+  /* Category Loader */
+  /* ------------------------------------------------------------------ */
+
+  const loadCategories = useCallback(async () => {
+
+    if (
+      cachedCategories &&
+      Date.now() - cacheTimestamp < CACHE_TTL
+    ) {
+      setCategories(cachedCategories);
+      setIsLoading(false);
+      return;
+    }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    abortControllerRef.current = new AbortController();
+
+    try {
+
+      setIsLoading(true);
+      setError(null);
+
+      if (retryCount > 0) {
+        await new Promise((r) =>
+          setTimeout(r, retryCount * 1000)
+        );
+      }
+
+      const data = await getCategories();
+
+      if (abortControllerRef.current.signal.aborted) return;
+
+      const sliced = (data || []).slice(0, 8);
+
+      cachedCategories = sliced;
+      cacheTimestamp = Date.now();
+
+      setCategories(sliced);
+      setRetryCount(0);
+
+    } catch (err) {
+
+      if (err instanceof Error && err.name === 'AbortError') return;
+
+      logger.error('MegaMenu category fetch failed', err);
+
+      setError(err instanceof Error ? err : new Error('Failed to load categories'));
+      setRetryCount((prev) => Math.min(prev + 1, MAX_RETRIES));
+
+    } finally {
+
+      if (!abortControllerRef.current?.signal.aborted) {
+        setIsLoading(false);
+      }
+
+    }
+
+  }, [retryCount]);
+
+  useEffect(() => {
+
+    loadCategories();
+
+    return () => {
+      abortControllerRef.current?.abort();
+      clearHoverTimer();
+    };
+
+  }, [loadCategories]);
+
+  /* ------------------------------------------------------------------ */
+  /* Prefetch category routes */
+  /* ------------------------------------------------------------------ */
+
+  const prefetchCategory = (slug: string) => {
+    router.prefetch(`/category/${slug}`);
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* Featured Panels */
+  /* ------------------------------------------------------------------ */
+
+  const featured = useMemo(() => [
+
+    {
+      name: 'Deal of the Day',
+      description: 'Limited time offers',
+      icon: Sparkles,
+      href: '/deals/today',
+      gradient: 'from-red-600 to-red-800'
+    },
+
+    {
+      name: 'Trending Now',
+      description: 'Most popular items',
+      icon: TrendingUp,
+      href: '/trending',
+      gradient: 'from-orange-600 to-orange-800'
+    },
+
+    {
+      name: 'New Arrivals',
+      description: 'Latest products',
+      icon: Clock,
+      href: '/new',
+      gradient: 'from-blue-600 to-blue-800'
+    },
+
+    {
+      name: 'Top Rated',
+      description: 'Customer favorites',
+      icon: Star,
+      href: '/top-rated',
+      gradient: 'from-green-600 to-green-800'
+    }
+
+  ], []);
+
+  /* ------------------------------------------------------------------ */
+  /* Render */
+  /* ------------------------------------------------------------------ */
+
+  return (
+
+    <div
+      ref={rootRef}
+      className="relative"
+    >
+
+      {/* Trigger */}
+
+      <button
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onClick={togglePinned}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className="flex items-center space-x-1 font-medium text-gray-700 hover:text-red-600 transition-colors"
+      >
+
+        <span>Categories</span>
+
+        <ChevronDown
+          className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+        />
+
+      </button>
+
+      {/* MegaMenu */}
+
+      {isOpen && (
+
+        <div
+          ref={focusTrapRef}
+          role="menu"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className="absolute top-full left-0 mt-2 w-screen max-w-6xl bg-white border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in duration-150"
+        >
+
+          <div className="p-8">
+
+            {/* Error */}
+
+            {error && !isLoading && categories.length === 0 ? (
+
+              <div className="text-center py-12">
+
+                <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+
+                <p className="font-medium text-gray-900 mb-2">
+                  Unable to load categories
+                </p>
+
+                <p className="text-sm text-gray-500 mb-6">
+                  {error.message}
+                </p>
+
+                <button
+                  onClick={loadCategories}
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  Retry
+                </button>
+
+              </div>
+
+            ) : (
+
+              <div className="grid grid-cols-4 gap-8">
+
+                {/* Categories */}
+
+                <div className="col-span-3">
+
+                  <div className="grid grid-cols-3 gap-6">
+
+                    {isLoading ? (
+
+                      Array.from({ length: 6 }).map((_, i) => (
+
+                        <div key={i} className="animate-pulse">
+
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mb-3"></div>
+
+                          <div className="space-y-2">
+
+                            {Array.from({ length: 4 }).map((_, j) => (
+
+                              <div
+                                key={j}
+                                className="h-3 bg-gray-100 rounded"
+                              />
+
+                            ))}
+
+                          </div>
+
+                        </div>
+
+                      ))
+
+                    ) : (
+
+                      categories.map((category) => (
+
+                        <div key={category.id}>
+
+                          <Link
+                            href={`/category/${category.slug}`}
+                            onMouseEnter={() => prefetchCategory(category.slug)}
+                            className="font-semibold text-gray-900 hover:text-red-600 block mb-3"
+                          >
+
+                            {category.name}
+
+                            {category.productCount > 0 && (
+                              <span className="ml-2 text-xs text-gray-500">
+                                ({category.productCount})
+                              </span>
+                            )}
+
+                          </Link>
+
+                          <div className="space-y-2">
+
+                            {[
+                              'Best Sellers',
+                              'New Arrivals',
+                              'On Sale',
+                              'Top Rated'
+                            ].map((sub) => (
+
+                              <Link
+                                key={sub}
+                                href={`/category/${category.slug}?filter=${sub.toLowerCase().replace(' ', '-')}`}
+                                className="block text-sm text-gray-600 hover:text-red-600"
+                              >
+                                {sub}
+                              </Link>
+
+                            ))}
+
+                          </div>
+
+                        </div>
+
+                      ))
+
+                    )}
+
+                  </div>
+
+                </div>
+
+                {/* Featured */}
+
+                <div className="border-l border-gray-100 pl-8">
+
+                  <h3 className="font-semibold text-gray-900 mb-6">
+                    Featured
+                  </h3>
+
+                  <div className="space-y-4">
+
+                    {featured.map((f) => {
+
+                      const Icon = f.icon;
+
+                      return (
+
+                        <Link
+                          key={f.name}
+                          href={f.href}
+                          className="block group"
+                        >
+
+                          <div
+                            className={`bg-gradient-to-r ${f.gradient} rounded-xl p-4 text-white transition-transform group-hover:scale-105`}
+                          >
+
+                            <div className="flex items-center space-x-3 mb-2">
+
+                              <Icon className="w-5 h-5" />
+
+                              <span className="font-semibold">
+                                {f.name}
+                              </span>
+
+                            </div>
+
+                            <p className="text-sm opacity-90">
+                              {f.description}
+                            </p>
+
+                          </div>
+
+                        </Link>
+
+                      );
+
+                    })}
+
+                  </div>
+
+                  {/* Quick Links */}
+
+                  <div className="mt-8 pt-8 border-t border-gray-100">
+
+                    <h4 className="font-semibold text-gray-900 mb-4">
+                      Quick Links
+                    </h4>
+
+                    <div className="space-y-3">
+
+                      <Link
+                        href="/shop/all"
+                        className="flex items-center justify-between text-sm text-gray-600 hover:text-red-600"
+                      >
+                        <span>Shop All Products</span>
+                        <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                          10K+
+                        </span>
+                      </Link>
+
+                      <Link
+                        href="/deals"
+                        className="flex items-center justify-between text-sm text-gray-600 hover:text-red-600"
+                      >
+                        <span>All Deals</span>
+                        <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
+                          Hot
+                        </span>
+                      </Link>
+
+                      <Link
+                        href="/brands"
+                        className="flex items-center justify-between text-sm text-gray-600 hover:text-red-600"
+                      >
+                        <span>Brands A-Z</span>
+                        <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                          200+
+                        </span>
+                      </Link>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            )}
+
+            {/* Bottom Banner */}
+
+            {!error && (
+
+              <div className="mt-8 pt-8 border-t border-gray-100">
+
+                <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-xl p-6 flex items-center justify-between">
+
+                  <div>
+
+                    <h3 className="font-semibold text-gray-900 mb-2">
+                      Need help choosing?
+                    </h3>
+
+                    <p className="text-sm text-gray-600">
+                      Get personalized recommendations from our experts
+                    </p>
+
+                  </div>
+
+                  <Link
+                    href="/help/shopping-assistance"
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                  >
+                    Get Help
+                  </Link>
+
+                </div>
+
+              </div>
+
+            )}
+
+          </div>
+
+        </div>
+
+      )}
+
+    </div>
+
+  );
+
+}

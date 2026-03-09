@@ -1,0 +1,73 @@
+'use client'
+
+import { useEffect,useState } from 'react'
+import { MegaMenuCategories } from './MegaMenuCategories'
+import { MegaMenuProductGrid } from './MegaMenuProductGrid'
+import { MegaMenuPromoPanel } from './MegaMenuPromoPanel'
+
+export function MegaMenu(){
+
+  const [open,setOpen] = useState(false)
+  const [categories,setCategories] = useState([])
+  const [active,setActive] = useState<string | null>(null)
+
+  useEffect(()=>{
+
+    fetch('/api/navigation/categories')
+      .then(r=>r.json())
+      .then(setCategories)
+
+  },[])
+
+  return (
+
+    <div className="relative">
+
+      <button
+        onClick={()=>setOpen(o=>!o)}
+        className="font-medium text-gray-700"
+      >
+        Categories
+      </button>
+
+      {open && (
+
+        <div className="absolute top-full mt-2 w-screen max-w-6xl bg-white border rounded-xl shadow-2xl p-8">
+
+          <div className="grid grid-cols-4 gap-8">
+
+            <div className="col-span-2">
+
+              <MegaMenuCategories
+                categories={categories}
+                setActive={setActive}
+              />
+
+            </div>
+
+            <div>
+
+              <MegaMenuProductGrid
+                slug={active}
+              />
+
+            </div>
+
+            <div>
+
+              <MegaMenuPromoPanel/>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
+
+    </div>
+
+  )
+
+}
+
